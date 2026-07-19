@@ -462,7 +462,8 @@
           </div>
           <div class="field">
             <label>House payoff $ / year</label>
-            <input type="number" id="s-payoffDollar" step="500">
+            <input type="number" id="s-payoffDollar" step="500" disabled>
+            <div class="sub">Auto-set to the remainder (total surplus minus discretionary)</div>
           </div>
         </div>
         <div class="stat"><span>Discretionary / year</span><span class="val" id="out-vacationAnnual"></span></div>
@@ -646,8 +647,7 @@
       splitMode: "percent",
       vacationPct: 50,
       payoffPct: 50,
-      vacationDollar: 5000,
-      payoffDollar: 5000
+      vacationDollar: 5000
     },
     payoff: {
       extraByYear: {}
@@ -849,7 +849,7 @@
       payoffAnnual = annualSurplus * (s.payoffPct / 100);
     } else {
       vacationAnnual = s.vacationDollar;
-      payoffAnnual = s.payoffDollar;
+      payoffAnnual = annualSurplus - s.vacationDollar;
     }
 
     return {
@@ -1052,7 +1052,6 @@
       renderAll();
     });
     bindNumber("s-vacationDollar", function () { return state.surplus.vacationDollar; }, function (v) { state.surplus.vacationDollar = v; });
-    bindNumber("s-payoffDollar", function () { return state.surplus.payoffDollar; }, function (v) { state.surplus.payoffDollar = v; });
 
     bindNumber("r-currentAge", function () { return state.retirement.currentAge; }, function (v) { state.retirement.currentAge = v; });
     bindNumber("r-retirementAge", function () { return state.retirement.retirementAge; }, function (v) { state.retirement.retirementAge = v; });
@@ -1145,7 +1144,7 @@
     document.getElementById("s-vacationPct").value = s.vacationPct;
     document.getElementById("s-payoffPct").value = s.payoffPct;
     document.getElementById("s-vacationDollar").value = s.vacationDollar;
-    document.getElementById("s-payoffDollar").value = s.payoffDollar;
+    document.getElementById("s-payoffDollar").value = Math.round(out.payoffAnnual);
 
     document.getElementById("out-vacationAnnual").textContent = fmt$(out.vacationAnnual);
     document.getElementById("out-payoffAnnual").textContent = fmt$(out.payoffAnnual);
