@@ -671,7 +671,11 @@
 
   function deepMerge(target, source) {
     if (typeof source !== "object" || source === null) return target;
-    Object.keys(target).forEach(function (key) {
+    // Union of target + source keys — not just target's — so dynamic,
+    // template-free maps like payoff.extraByYear (keyed by year, absent
+    // from DEFAULTS) survive being merged back in from saved/imported state.
+    const keys = new Set(Object.keys(target).concat(Object.keys(source)));
+    keys.forEach(function (key) {
       if (typeof target[key] === "object" && target[key] !== null && !Array.isArray(target[key])) {
         target[key] = deepMerge(Object.assign({}, target[key]), source[key] || {});
       } else if (Object.prototype.hasOwnProperty.call(source, key)) {
