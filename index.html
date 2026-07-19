@@ -1,0 +1,1507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home &amp; Lifestyle Finances</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --border: #dde1e6;
+    --text: #1b1f24;
+    --text-dim: #5b6472;
+    --accent: #2563eb;
+    --accent-dim: #dbe6fd;
+    --good: #1a7f37;
+    --bad: #cf222e;
+    --input-bg: #ffffff;
+    --radius: 10px;
+    --series-balance: #2a78d6;
+    --series-contributed: #1baf7a;
+    --series-earned: #eda100;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --panel: #1d2026;
+      --border: #2e333b;
+      --text: #eceef1;
+      --text-dim: #9aa4b2;
+      --accent: #5b9bff;
+      --accent-dim: #223252;
+      --good: #4cc167;
+      --bad: #ff6b6b;
+      --input-bg: #262a31;
+      --series-balance: #3987e5;
+      --series-contributed: #199e70;
+      --series-earned: #c98500;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.4;
+  }
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  header h1 { font-size: 1.15rem; margin: 0; }
+  .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    padding: 7px 13px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.danger { color: var(--bad); }
+  .btn.small { padding: 4px 9px; font-size: 0.78rem; }
+  nav.tabs {
+    display: flex;
+    gap: 4px;
+    padding: 10px 20px 0;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  nav.tabs button {
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+  }
+  nav.tabs button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 20px; }
+  .tabpanel { display: none; }
+  .tabpanel.active { display: block; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 4px; }
+  .card h3 { font-size: 0.85rem; margin: 16px 0 8px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; }
+  .card p.hint { color: var(--text-dim); font-size: 0.82rem; margin: 2px 0 14px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 0.82rem; color: var(--text-dim); margin-bottom: 4px; }
+  .field .sub { font-size: 0.76rem; color: var(--text-dim); margin-top: 3px; }
+  .field input[type=number], .field input[type=text], .field select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--input-bg);
+    color: var(--text);
+    font-size: 0.92rem;
+  }
+  .field-row { display: flex; gap: 10px; }
+  .field-row .field { flex: 1; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .checkbox-row input { width: 16px; height: 16px; }
+  .checkbox-row label { font-size: 0.85rem; color: var(--text); }
+  .derived {
+    font-size: 0.8rem;
+    color: var(--accent);
+    margin-top: 3px;
+  }
+  .stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 0.88rem;
+  }
+  .stat:last-child { border-bottom: none; }
+  .stat .val { font-weight: 600; }
+  .stat.total { font-size: 1rem; padding-top: 10px; }
+  .stat.total .val { color: var(--accent); }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.76rem; font-weight: 600; }
+  .badge.good { background: rgba(26,127,55,0.15); color: var(--good); }
+  .badge.bad { background: rgba(207,34,46,0.15); color: var(--bad); }
+  .radio-toggle { display: flex; gap: 6px; margin-bottom: 14px; }
+  .radio-toggle button {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text-dim);
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .radio-toggle button.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; margin-top: 8px; }
+  th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--text-dim); font-weight: 600; font-size: 0.76rem; text-transform: uppercase; }
+  tbody tr:hover { background: var(--accent-dim); }
+  details { margin-top: 10px; }
+  details summary { cursor: pointer; font-size: 0.85rem; color: var(--accent); margin-bottom: 8px; }
+  .addrow { display: flex; gap: 8px; align-items: flex-end; margin-top: 14px; }
+  .addrow .field { margin-bottom: 0; flex: 1; }
+  .note { font-size: 0.78rem; color: var(--text-dim); background: var(--bg); border-radius: 7px; padding: 10px 12px; margin-top: 12px; }
+  .full-width { grid-column: 1 / -1; }
+  input[type=file] { display: none; }
+
+  .chart-legend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 6px; font-size: 0.82rem; color: var(--text-dim); }
+  .chart-legend .item { display: flex; align-items: center; gap: 7px; }
+  .chart-legend .swatch { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+  .chart-wrap { position: relative; margin-top: 4px; }
+  svg.chart-svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .chart-grid { stroke: var(--border); stroke-width: 1; }
+  .chart-axis-baseline { stroke: var(--text-dim); stroke-width: 1; }
+  .chart-axis-label { fill: var(--text-dim); font-size: 11px; font-family: inherit; }
+  .chart-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .chart-area { opacity: 0.12; stroke: none; }
+  .chart-endlabel { font-size: 11px; font-weight: 600; font-family: inherit; }
+  .chart-crosshair { stroke: var(--text-dim); stroke-width: 1; stroke-dasharray: 2,3; opacity: 0; pointer-events: none; }
+  .chart-dot { stroke: var(--panel); stroke-width: 2; opacity: 0; pointer-events: none; }
+  .chart-hit { fill: transparent; }
+  .chart-tooltip {
+    position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 11px; font-size: 0.78rem; box-shadow: 0 6px 18px rgba(0,0,0,0.18);
+    opacity: 0; transition: opacity .08s linear; z-index: 5; min-width: 165px;
+  }
+  .chart-tooltip .tt-age { font-weight: 600; margin-bottom: 5px; color: var(--text); }
+  .chart-tooltip .tt-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 2px 0; }
+  .chart-tooltip .tt-row .key { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
+  .chart-tooltip .tt-row .line-key { width: 11px; height: 2px; display: inline-block; border-radius: 2px; }
+  .chart-tooltip .tt-row .value { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Home &amp; Lifestyle Finances</h1>
+  <div class="header-actions">
+    <button class="btn" id="btn-export">Export data</button>
+    <button class="btn" id="btn-import">Import data</button>
+    <button class="btn danger" id="btn-reset">Reset all</button>
+    <input type="file" id="file-import" accept="application/json">
+  </div>
+</header>
+
+<nav class="tabs">
+  <button data-tab="housing" class="active">Home Buying</button>
+  <button data-tab="surplus">Surplus</button>
+  <button data-tab="payoff">House Payoff</button>
+  <button data-tab="retirement">Retirement</button>
+</nav>
+
+<main>
+
+  <!-- ===================== HOME BUYING ===================== -->
+  <section class="tabpanel active" id="tab-housing">
+    <div class="grid">
+
+      <div class="card">
+        <h2>Loan &amp; purchase inputs</h2>
+        <div class="field">
+          <label>Home price</label>
+          <input type="number" id="h-homePrice" step="1000">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Down payment (%)</label>
+            <input type="number" id="h-downPaymentPct" step="0.5">
+            <div class="derived" id="h-downPaymentAmount"></div>
+          </div>
+          <div class="field">
+            <label>Interest rate (%)</label>
+            <input type="number" id="h-interestRate" step="0.01">
+          </div>
+        </div>
+        <div class="field">
+          <label>Mortgage term</label>
+          <select id="h-termYears">
+            <option value="15">15 years</option>
+            <option value="20">20 years</option>
+            <option value="30">30 years</option>
+          </select>
+        </div>
+        <h3>Ongoing costs</h3>
+        <div class="field-row">
+          <div class="field">
+            <label>Property tax rate (annual, % of home value)</label>
+            <input type="number" id="h-propertyTaxRate" step="0.01">
+          </div>
+          <div class="field">
+            <label>Home insurance (annual $)</label>
+            <input type="number" id="h-homeInsuranceAnnual" step="50">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>HOA fee (monthly $)</label>
+            <input type="number" id="h-hoaMonthly" step="10">
+          </div>
+          <div class="field">
+            <label>PMI rate (annual, % of loan)</label>
+            <input type="number" id="h-pmiRate" step="0.01">
+            <div class="sub">Only applies if down payment &lt; 20%</div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Annual maintenance (% of home value)</label>
+          <input type="number" id="h-maintenanceRate" step="0.1">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Monthly housing cost</h2>
+        <p class="hint">All rates converted to a monthly dollar amount.</p>
+        <div class="stat"><span>Principal &amp; interest</span><span class="val" id="out-pi"></span></div>
+        <div class="stat"><span>Property tax</span><span class="val" id="out-tax"></span></div>
+        <div class="stat"><span>Home insurance</span><span class="val" id="out-ins"></span></div>
+        <div class="stat"><span>HOA fee</span><span class="val" id="out-hoa"></span></div>
+        <div class="stat"><span>PMI</span><span class="val" id="out-pmi"></span></div>
+        <div class="stat"><span>Maintenance reserve</span><span class="val" id="out-maint"></span></div>
+        <div class="stat total"><span>Total monthly housing cost</span><span class="val" id="out-total"></span></div>
+        <div class="note" id="out-pmi-note"></div>
+
+        <h3>Affordability check (25% rule)</h3>
+        <div id="afford-block">
+          <div class="stat"><span>Gross monthly income (from surplus tab)</span><span class="val" id="out-grossIncome"></span></div>
+          <div class="stat"><span>Housing cost as % of income</span><span class="val" id="out-affordPct"></span></div>
+          <div class="stat"><span>25% threshold</span><span class="val" id="out-affordMax"></span></div>
+          <div class="stat"><span>Surplus / (shortfall) vs. threshold</span><span class="val" id="out-affordDelta"></span></div>
+          <div class="stat"><span>Status</span><span class="val" id="out-affordStatus"></span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Cash to close</h2>
+        <p class="hint">Down payment + closing costs + upfront/move-in costs.</p>
+        <div class="stat"><span>Down payment</span><span class="val" id="out-cc-down"></span></div>
+        <div class="stat"><span>Closing costs subtotal</span><span class="val" id="out-cc-closing"></span></div>
+        <div class="stat"><span>Other upfront costs subtotal</span><span class="val" id="out-cc-upfront"></span></div>
+        <div class="stat total"><span>Total cash to close</span><span class="val" id="out-cc-total"></span></div>
+
+        <details>
+          <summary>Closing cost detail</summary>
+          <div class="field-row">
+            <div class="field"><label>Loan origination fee (%)</label><input type="number" id="c-originationPct" step="0.1"></div>
+            <div class="field"><label>Discount points (%)</label><input type="number" id="c-pointsPct" step="0.1"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Appraisal fee ($)</label><input type="number" id="c-appraisalFee" step="10"></div>
+            <div class="field"><label>Home inspection ($)</label><input type="number" id="c-inspectionFee" step="10"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Title insurance &amp; search ($)</label><input type="number" id="c-titleFee" step="10"></div>
+            <div class="field"><label>Attorney / escrow / closing ($)</label><input type="number" id="c-attorneyFee" step="10"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Recording fees ($)</label><input type="number" id="c-recordingFee" step="5"></div>
+            <div class="field"><label>Transfer / excise tax (%)</label><input type="number" id="c-transferTaxPct" step="0.05"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Prepaid property tax (months)</label><input type="number" id="c-prepaidTaxMonths" step="1"></div>
+            <div class="field"><label>Prepaid homeowners insurance ($)</label><input type="number" id="c-prepaidInsurance" step="50"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Prepaid interest (days)</label><input type="number" id="c-prepaidInterestDays" step="1"></div>
+            <div class="field"><label>Other closing costs ($)</label><input type="number" id="c-otherClosing" step="10"></div>
+          </div>
+        </details>
+
+        <details>
+          <summary>Other upfront / move-in costs</summary>
+          <div class="field-row">
+            <div class="field"><label>Moving costs ($)</label><input type="number" id="u-moving" step="50"></div>
+            <div class="field"><label>Immediate repairs / upgrades ($)</label><input type="number" id="u-repairs" step="50"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Furniture &amp; appliances ($)</label><input type="number" id="u-furniture" step="50"></div>
+            <div class="field"><label>Home warranty (1st year, $)</label><input type="number" id="u-warranty" step="25"></div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Utility deposits &amp; setup ($)</label><input type="number" id="u-utilityDeposits" step="25"></div>
+            <div class="field"><label>Other one-time costs ($)</label><input type="number" id="u-other" step="25"></div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card full-width">
+        <h2>Amortization schedule</h2>
+        <p class="hint">Year-by-year balance for the original loan (no extra payments). Feeds the House Payoff tab. PMI ends year <span id="out-pmiEndYear"></span>.</p>
+        <details>
+          <summary>Show year-by-year table</summary>
+          <table>
+            <thead><tr><th>Year</th><th>Begin balance</th><th>Principal paid</th><th>Interest paid</th><th>End balance</th><th>LTV</th><th>PMI</th></tr></thead>
+            <tbody id="out-amort-body"></tbody>
+          </table>
+        </details>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== SURPLUS ===================== -->
+  <section class="tabpanel" id="tab-surplus">
+    <div class="grid">
+
+      <div class="card">
+        <h2>Pay</h2>
+        <div class="field">
+          <label>Gross regular pay (monthly $)</label>
+          <input type="number" id="s-grossRegularMonthly" step="100">
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="s-titheRegular">
+          <label for="s-titheRegular">Tithe 10% of this gross (subtracted last, after tax/HSA/health insurance/retirement)</label>
+        </div>
+        <div class="field">
+          <label>Gross bonus pay (quarterly $)</label>
+          <input type="number" id="s-grossBonusQuarterly" step="100">
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="s-titheBonus">
+          <label for="s-titheBonus">Tithe 10% of this gross (subtracted last; bonus has no HSA/health insurance deduction)</label>
+        </div>
+        <div class="field">
+          <label>Effective tax rate (%)</label>
+          <input type="number" id="s-taxRate" step="0.5">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Monthly HSA contribution ($)</label>
+            <input type="number" id="s-hsaMonthly" step="10">
+          </div>
+          <div class="field">
+            <label>Monthly health insurance ($)</label>
+            <input type="number" id="s-healthInsuranceMonthly" step="10">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Budget categories</h2>
+        <div class="field">
+          <label>Needs (monthly $)</label>
+          <input type="number" id="s-needs" step="50">
+        </div>
+        <div class="field">
+          <label>Wants (monthly $)</label>
+          <input type="number" id="s-wants" step="50">
+        </div>
+        <div class="field">
+          <label>Housing (monthly $) &mdash; auto-filled from Home Buying tab</label>
+          <input type="number" id="s-housingOverride" step="10">
+          <div class="sub">Calculated: <span id="s-housingCalculated"></span> &middot; <button class="btn small" id="btn-reset-housing" type="button">Use calculated value</button></div>
+        </div>
+        <div class="field">
+          <label>Retirement (% of gross regular + bonus pay, combined)</label>
+          <input type="number" id="s-retirementPct" step="0.5">
+          <div class="derived" id="s-retirementDollar"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Total surplus</h2>
+        <div class="stat"><span>Annual</span><span class="val" id="out-surplusAnnual"></span></div>
+        <div class="stat"><span>Quarterly</span><span class="val" id="out-surplusQuarterly"></span></div>
+        <div class="stat total"><span>Monthly</span><span class="val" id="out-surplusMonthly"></span></div>
+        <div class="note">Annual surplus = (net regular pay &times; 12) + (net bonus pay &times; 4) &minus; (needs + wants + housing + retirement) &times; 12 &minus; tithe.</div>
+      </div>
+
+      <div class="card full-width">
+        <h2>Allocate the surplus</h2>
+        <p class="hint">Split between discretionary (vacation/fun) and house payoff.</p>
+        <div class="radio-toggle">
+          <button data-split="percent" id="split-percent">Percentage</button>
+          <button data-split="dollar" id="split-dollar">Dollar amount / year</button>
+        </div>
+        <div id="split-percent-fields" class="field-row">
+          <div class="field">
+            <label>Discretionary (vacation/fun) %</label>
+            <input type="number" id="s-vacationPct" step="5" min="0" max="100">
+          </div>
+          <div class="field">
+            <label>House payoff %</label>
+            <input type="number" id="s-payoffPct" step="5" min="0" max="100" disabled>
+            <div class="sub">Auto-set to the remainder</div>
+          </div>
+        </div>
+        <div id="split-dollar-fields" class="field-row" style="display:none">
+          <div class="field">
+            <label>Discretionary (vacation/fun) $ / year</label>
+            <input type="number" id="s-vacationDollar" step="500">
+          </div>
+          <div class="field">
+            <label>House payoff $ / year</label>
+            <input type="number" id="s-payoffDollar" step="500">
+          </div>
+        </div>
+        <div class="stat"><span>Discretionary / year</span><span class="val" id="out-vacationAnnual"></span></div>
+        <div class="stat"><span>House payoff / year</span><span class="val" id="out-payoffAnnual"></span></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== HOUSE PAYOFF ===================== -->
+  <section class="tabpanel" id="tab-payoff">
+    <div class="grid">
+
+      <div class="card">
+        <h2>Payoff summary</h2>
+        <p class="hint">Recurring surplus-to-payoff amount is applied as an annual lump sum at the start of each year, on top of regular monthly payments.</p>
+        <div class="stat"><span>Recurring annual extra payment (from Surplus tab)</span><span class="val" id="out-po-recurring"></span></div>
+        <div class="stat"><span>Original payoff term</span><span class="val" id="out-po-originalTerm"></span></div>
+        <div class="stat total"><span>New payoff year</span><span class="val" id="out-po-newYear"></span></div>
+        <div class="stat"><span>Total interest saved</span><span class="val" id="out-po-interestSaved"></span></div>
+        <div class="stat"><span>PMI ends (recalculated)</span><span class="val" id="out-po-pmiEnd"></span></div>
+      </div>
+
+      <div class="card">
+        <h2>Optional extra amounts by year</h2>
+        <p class="hint">Added on top of the recurring surplus-to-payoff amount for that year.</p>
+        <table>
+          <thead><tr><th>Year</th><th>Extra amount</th><th></th></tr></thead>
+          <tbody id="po-rows"></tbody>
+        </table>
+        <div class="addrow">
+          <div class="field">
+            <label>Year</label>
+            <select id="po-add-year"></select>
+          </div>
+          <div class="field">
+            <label>Extra amount ($)</label>
+            <input type="number" id="po-add-amount" step="500" value="0">
+          </div>
+          <button class="btn primary" id="po-add-btn" type="button">Add row</button>
+        </div>
+      </div>
+
+      <div class="card full-width">
+        <h2>Revised amortization schedule</h2>
+        <details>
+          <summary>Show year-by-year table</summary>
+          <table>
+            <thead><tr><th>Year</th><th>Begin balance</th><th>Extra applied</th><th>Principal paid</th><th>Interest paid</th><th>End balance</th><th>LTV</th><th>PMI</th></tr></thead>
+            <tbody id="po-amort-body"></tbody>
+          </table>
+        </details>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== RETIREMENT ===================== -->
+  <section class="tabpanel" id="tab-retirement">
+    <div class="grid">
+
+      <div class="card">
+        <h2>Inputs</h2>
+        <div class="field-row">
+          <div class="field">
+            <label>Current age</label>
+            <input type="number" id="r-currentAge" step="1">
+          </div>
+          <div class="field">
+            <label>Retirement age</label>
+            <input type="number" id="r-retirementAge" step="1">
+          </div>
+        </div>
+        <div class="field">
+          <label>Starting balance ($)</label>
+          <input type="number" id="r-startingBalance" step="500">
+        </div>
+        <div class="field">
+          <label>Return rate (nominal, annual %)</label>
+          <input type="number" id="r-returnRatePct" step="0.25">
+        </div>
+        <h3>Employer 401k match</h3>
+        <div class="field-row">
+          <div class="field">
+            <label>Match rate (% of your contribution)</label>
+            <input type="number" id="r-employerMatchRatePct" step="5">
+          </div>
+          <div class="field">
+            <label>Cap (% of pay)</label>
+            <input type="number" id="r-employerMatchCapPct" step="0.5">
+          </div>
+        </div>
+        <div class="note">Retirement % and employer match are computed from the Surplus tab's gross pay figures.</div>
+      </div>
+
+      <div class="card">
+        <h2>Projection</h2>
+        <div class="stat"><span>Your monthly contribution</span><span class="val" id="out-r-yourContribution"></span></div>
+        <div class="stat"><span>Employer match (monthly)</span><span class="val" id="out-r-employerMatch"></span></div>
+        <div class="stat"><span>Total monthly contribution</span><span class="val" id="out-r-totalContribution"></span></div>
+        <div class="stat"><span>Years until retirement</span><span class="val" id="out-r-years"></span></div>
+        <div class="stat total"><span>Projected balance at retirement</span><span class="val" id="out-r-projected"></span></div>
+        <h3>Contributed vs. earned</h3>
+        <div class="stat"><span>Total contributed (starting balance + contributions)</span><span class="val" id="out-r-contributed"></span></div>
+        <div class="stat"><span>Total earned (growth)</span><span class="val" id="out-r-earned"></span></div>
+      </div>
+
+      <div class="card full-width">
+        <h2>Balance over time</h2>
+        <p class="hint">Projected balance, total contributed, and total earned (growth) from age <span id="r-chart-startAge"></span> to <span id="r-chart-endAge"></span>.</p>
+        <div class="chart-legend" id="r-chart-legend"></div>
+        <div class="chart-wrap" id="r-chart-wrap"></div>
+        <details>
+          <summary>Show as table</summary>
+          <table>
+            <thead><tr><th>Age</th><th>Balance</th><th>Contributed</th><th>Earned</th></tr></thead>
+            <tbody id="r-chart-table-body"></tbody>
+          </table>
+        </details>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------------------------------------------------------------------
+  // Default state
+  // ---------------------------------------------------------------------
+  const DEFAULTS = {
+    housing: {
+      homePrice: 400000,
+      downPaymentPct: 5,
+      interestRate: 6.5,
+      termYears: 30,
+      propertyTaxRate: 0.51,
+      homeInsuranceAnnual: 1800,
+      hoaMonthly: 0,
+      pmiRate: 0.75,
+      maintenanceRate: 1.0,
+      closing: {
+        originationPct: 1.0,
+        pointsPct: 0,
+        appraisalFee: 550,
+        inspectionFee: 450,
+        titleFee: 1200,
+        attorneyFee: 1000,
+        recordingFee: 125,
+        transferTaxPct: 0.5,
+        prepaidTaxMonths: 2,
+        prepaidInsurance: 1800,
+        prepaidInterestDays: 15,
+        otherClosing: 500
+      },
+      upfront: {
+        moving: 2000,
+        repairs: 0,
+        furniture: 0,
+        warranty: 600,
+        utilityDeposits: 200,
+        other: 0
+      }
+    },
+    surplus: {
+      grossRegularMonthly: 6000,
+      titheRegular: true,
+      grossBonusQuarterly: 2000,
+      titheBonus: true,
+      taxRate: 22,
+      hsaMonthly: 0,
+      healthInsuranceMonthly: 0,
+      needs: 1800,
+      wants: 500,
+      housingOverride: null,
+      housingOverrideActive: false,
+      retirementPct: 8,
+      splitMode: "percent",
+      vacationPct: 50,
+      payoffPct: 50,
+      vacationDollar: 5000,
+      payoffDollar: 5000
+    },
+    payoff: {
+      extraByYear: {}
+    },
+    retirement: {
+      currentAge: 30,
+      startingBalance: 10000,
+      retirementAge: 65,
+      returnRatePct: 7,
+      employerMatchRatePct: 50,
+      employerMatchCapPct: 2
+    }
+  };
+
+  let state = null;
+
+  function deepMerge(target, source) {
+    if (typeof source !== "object" || source === null) return target;
+    Object.keys(target).forEach(function (key) {
+      if (typeof target[key] === "object" && target[key] !== null && !Array.isArray(target[key])) {
+        target[key] = deepMerge(Object.assign({}, target[key]), source[key] || {});
+      } else if (Object.prototype.hasOwnProperty.call(source, key)) {
+        target[key] = source[key];
+      }
+    });
+    return target;
+  }
+
+  function loadState() {
+    let saved = null;
+    try {
+      const raw = localStorage.getItem("hlf-state");
+      if (raw) saved = JSON.parse(raw);
+    } catch (e) { /* ignore corrupt storage */ }
+    state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), saved || {});
+  }
+
+  function saveState() {
+    localStorage.setItem("hlf-state", JSON.stringify(state));
+  }
+
+  // ---------------------------------------------------------------------
+  // Formatting helpers
+  // ---------------------------------------------------------------------
+  function fmt$(n) {
+    if (!isFinite(n)) return "$0";
+    return "$" + Math.round(n).toLocaleString();
+  }
+  function fmtPct(n, digits) {
+    if (!isFinite(n)) return "0%";
+    return n.toFixed(digits === undefined ? 1 : digits) + "%";
+  }
+  function fmt$compact(n) {
+    if (!isFinite(n)) return "$0";
+    const sign = n < 0 ? "-" : "";
+    const abs = Math.abs(n);
+    if (abs >= 1000000) return sign + "$" + (abs / 1000000).toFixed(abs >= 10000000 ? 0 : 1) + "M";
+    if (abs >= 1000) return sign + "$" + Math.round(abs / 1000) + "K";
+    return sign + "$" + Math.round(abs);
+  }
+  function niceCeil(v) {
+    if (v <= 0) return 1;
+    const exp = Math.floor(Math.log10(v));
+    const base = Math.pow(10, exp);
+    const norm = v / base;
+    let niceNorm;
+    if (norm <= 1) niceNorm = 1;
+    else if (norm <= 2) niceNorm = 2;
+    else if (norm <= 5) niceNorm = 5;
+    else niceNorm = 10;
+    return niceNorm * base;
+  }
+  function pickAgeTicks(minAge, maxAge) {
+    const span = maxAge - minAge;
+    if (span <= 0) return [minAge];
+    const niceSteps = [1, 2, 5, 10, 15, 20, 25];
+    const rawStep = span / 6;
+    const step = niceSteps.find(function (s) { return s >= rawStep; }) || Math.ceil(rawStep / 10) * 10;
+    const ticks = [];
+    for (let a = minAge; a < maxAge; a += step) ticks.push(a);
+    ticks.push(maxAge);
+    return ticks;
+  }
+
+  // ---------------------------------------------------------------------
+  // Calculation engine
+  // ---------------------------------------------------------------------
+  function buildAmortization(principal, annualRatePct, termYears, monthlyPI, extraByYear, downPaymentPct, homePrice) {
+    const monthlyRate = annualRatePct / 100 / 12;
+    let balance = principal;
+    const schedule = [];
+    for (let year = 1; year <= termYears && balance > 0.5; year++) {
+      const beginBalance = balance;
+      let extra = (extraByYear && extraByYear[year]) || 0;
+      extra = Math.min(extra, balance);
+      balance -= extra;
+      let yearInterest = 0;
+      let yearPrincipal = extra;
+      for (let m = 0; m < 12 && balance > 0.005; m++) {
+        const interest = balance * monthlyRate;
+        let principalPaid = monthlyPI - interest;
+        if (principalPaid > balance) principalPaid = balance;
+        if (principalPaid < 0) principalPaid = 0;
+        balance -= principalPaid;
+        yearInterest += interest;
+        yearPrincipal += principalPaid;
+      }
+      const ltv = homePrice ? (balance / homePrice * 100) : null;
+      const pmiActive = downPaymentPct < 20 && ltv !== null && ltv > 80;
+      schedule.push({
+        year: year,
+        beginBalance: beginBalance,
+        extra: extra,
+        principalPaid: yearPrincipal,
+        interestPaid: yearInterest,
+        endBalance: Math.max(balance, 0),
+        ltv: ltv,
+        pmiActive: pmiActive
+      });
+    }
+    return schedule;
+  }
+
+  function computeHousing() {
+    const h = state.housing;
+    const downPaymentAmount = h.homePrice * h.downPaymentPct / 100;
+    const loanAmount = h.homePrice - downPaymentAmount;
+    const monthlyRate = h.interestRate / 100 / 12;
+    const n = h.termYears * 12;
+    const pi = monthlyRate === 0
+      ? loanAmount / n
+      : loanAmount * monthlyRate * Math.pow(1 + monthlyRate, n) / (Math.pow(1 + monthlyRate, n) - 1);
+    const monthlyPropertyTax = h.homePrice * h.propertyTaxRate / 100 / 12;
+    const monthlyInsurance = h.homeInsuranceAnnual / 12;
+    const monthlyHOA = h.hoaMonthly;
+    const monthlyPMI = h.downPaymentPct < 20 ? loanAmount * h.pmiRate / 100 / 12 : 0;
+    const monthlyMaintenance = h.homePrice * h.maintenanceRate / 100 / 12;
+    const totalMonthly = pi + monthlyPropertyTax + monthlyInsurance + monthlyHOA + monthlyPMI + monthlyMaintenance;
+
+    const c = h.closing;
+    const originationFee = loanAmount * c.originationPct / 100;
+    const pointsFee = loanAmount * c.pointsPct / 100;
+    const transferTax = h.homePrice * c.transferTaxPct / 100;
+    const prepaidTax = monthlyPropertyTax * c.prepaidTaxMonths;
+    const prepaidInterest = loanAmount * (h.interestRate / 100 / 365) * c.prepaidInterestDays;
+    const closingSubtotal = originationFee + pointsFee + c.appraisalFee + c.inspectionFee + c.titleFee +
+      c.attorneyFee + c.recordingFee + transferTax + prepaidTax + c.prepaidInsurance + prepaidInterest + c.otherClosing;
+
+    const u = h.upfront;
+    const upfrontSubtotal = u.moving + u.repairs + u.furniture + u.warranty + u.utilityDeposits + u.other;
+
+    const totalCashToClose = downPaymentAmount + closingSubtotal + upfrontSubtotal;
+
+    const schedule = buildAmortization(loanAmount, h.interestRate, h.termYears, pi, {}, h.downPaymentPct, h.homePrice);
+    let pmiEndYear = null;
+    if (h.downPaymentPct < 20) {
+      const firstClear = schedule.find(function (r) { return !r.pmiActive; });
+      pmiEndYear = firstClear ? firstClear.year : null;
+    }
+
+    return {
+      downPaymentAmount: downPaymentAmount, loanAmount: loanAmount, pi: pi,
+      monthlyPropertyTax: monthlyPropertyTax, monthlyInsurance: monthlyInsurance, monthlyHOA: monthlyHOA,
+      monthlyPMI: monthlyPMI, monthlyMaintenance: monthlyMaintenance, totalMonthly: totalMonthly,
+      closingSubtotal: closingSubtotal, upfrontSubtotal: upfrontSubtotal, totalCashToClose: totalCashToClose,
+      schedule: schedule, pmiEndYear: pmiEndYear
+    };
+  }
+
+  function computeSurplus() {
+    const s = state.surplus;
+    const housing = computeHousing();
+    const housingCost = s.housingOverrideActive && s.housingOverride !== null && s.housingOverride !== ""
+      ? Number(s.housingOverride)
+      : housing.totalMonthly;
+
+    const taxRate = s.taxRate / 100;
+    const taxableRegular = s.grossRegularMonthly - s.hsaMonthly - s.healthInsuranceMonthly;
+    const netRegularPretithe = taxableRegular - taxableRegular * taxRate;
+
+    const taxableBonus = s.grossBonusQuarterly;
+    const netBonusPretithe = taxableBonus - taxableBonus * taxRate;
+
+    const grossMonthlyCombined = s.grossRegularMonthly + s.grossBonusQuarterly / 3;
+    const retirementDollar = grossMonthlyCombined * (s.retirementPct / 100);
+
+    const annualPretithe = netRegularPretithe * 12 + netBonusPretithe * 4;
+    const annualDeductions = (s.needs + s.wants + housingCost + retirementDollar) * 12;
+    const titheAnnual = (s.titheRegular ? s.grossRegularMonthly * 12 * 0.10 : 0) +
+      (s.titheBonus ? s.grossBonusQuarterly * 4 * 0.10 : 0);
+
+    const annualSurplus = annualPretithe - annualDeductions - titheAnnual;
+    const quarterlySurplus = annualSurplus / 4;
+    const monthlySurplus = annualSurplus / 12;
+
+    let vacationAnnual, payoffAnnual;
+    if (s.splitMode === "percent") {
+      vacationAnnual = annualSurplus * (s.vacationPct / 100);
+      payoffAnnual = annualSurplus * (s.payoffPct / 100);
+    } else {
+      vacationAnnual = s.vacationDollar;
+      payoffAnnual = s.payoffDollar;
+    }
+
+    return {
+      housingCost: housingCost, retirementDollar: retirementDollar, grossMonthlyCombined: grossMonthlyCombined,
+      annualSurplus: annualSurplus, quarterlySurplus: quarterlySurplus, monthlySurplus: monthlySurplus,
+      vacationAnnual: vacationAnnual, payoffAnnual: payoffAnnual
+    };
+  }
+
+  function computePayoff() {
+    const housing = computeHousing();
+    const surplus = computeSurplus();
+    const h = state.housing;
+    const recurringAnnual = Math.max(surplus.payoffAnnual, 0);
+    const extraByYear = {};
+    for (let year = 1; year <= h.termYears; year++) {
+      const manual = Number(state.payoff.extraByYear[year] || 0);
+      extraByYear[year] = recurringAnnual + manual;
+    }
+    const schedule = buildAmortization(housing.loanAmount, h.interestRate, h.termYears, housing.pi, extraByYear, h.downPaymentPct, h.homePrice);
+    const payoffYear = schedule.length;
+    const totalInterestNew = schedule.reduce(function (sum, r) { return sum + r.interestPaid; }, 0);
+    const totalInterestOriginal = housing.schedule.reduce(function (sum, r) { return sum + r.interestPaid; }, 0);
+    const interestSaved = totalInterestOriginal - totalInterestNew;
+    let pmiEndYearNew = null;
+    if (h.downPaymentPct < 20) {
+      const firstClear = schedule.find(function (r) { return !r.pmiActive; });
+      pmiEndYearNew = firstClear ? firstClear.year : null;
+    }
+    return {
+      schedule: schedule, payoffYear: payoffYear, interestSaved: interestSaved,
+      recurringAnnual: recurringAnnual, pmiEndYearNew: pmiEndYearNew, originalTermYears: h.termYears
+    };
+  }
+
+  function computeRetirement() {
+    const r = state.retirement;
+    const surplus = computeSurplus();
+    const retirementDollarMonthly = surplus.retirementDollar;
+    const matchablePct = Math.min(state.surplus.retirementPct, r.employerMatchCapPct);
+    const employerMatchMonthly = surplus.grossMonthlyCombined * (matchablePct / 100) * (r.employerMatchRatePct / 100);
+    const monthlyContribution = retirementDollarMonthly + employerMatchMonthly;
+    const months = Math.max((r.retirementAge - r.currentAge) * 12, 0);
+    const monthlyReturn = r.returnRatePct / 100 / 12;
+
+    let futureStarting, futureContrib;
+    if (monthlyReturn === 0) {
+      futureStarting = r.startingBalance;
+      futureContrib = monthlyContribution * months;
+    } else {
+      futureStarting = r.startingBalance * Math.pow(1 + monthlyReturn, months);
+      futureContrib = monthlyContribution * ((Math.pow(1 + monthlyReturn, months) - 1) / monthlyReturn);
+    }
+    const projectedBalance = futureStarting + futureContrib;
+    const totalContributed = r.startingBalance + monthlyContribution * months;
+    const totalEarned = projectedBalance - totalContributed;
+
+    return {
+      monthlyContribution: retirementDollarMonthly, employerMatchMonthly: employerMatchMonthly,
+      totalMonthlyContribution: monthlyContribution, months: months,
+      projectedBalance: projectedBalance, totalContributed: totalContributed, totalEarned: totalEarned
+    };
+  }
+
+  function computeRetirementTimeline() {
+    const r = state.retirement;
+    const ret = computeRetirement();
+    const monthlyReturn = r.returnRatePct / 100 / 12;
+    const months = ret.months;
+
+    let balance = r.startingBalance;
+    let contributed = r.startingBalance;
+    const points = [{ age: r.currentAge, balance: balance, contributed: contributed, earned: 0 }];
+    for (let m = 1; m <= months; m++) {
+      balance = balance * (1 + monthlyReturn) + ret.totalMonthlyContribution;
+      contributed += ret.totalMonthlyContribution;
+      if (m % 12 === 0 || m === months) {
+        points.push({
+          age: r.currentAge + m / 12,
+          balance: balance,
+          contributed: contributed,
+          earned: balance - contributed
+        });
+      }
+    }
+    return points;
+  }
+
+  // ---------------------------------------------------------------------
+  // Binding helpers
+  // ---------------------------------------------------------------------
+  // Getters/setters always dereference through the live `state` global (never
+  // a captured sub-object) so rebinding isn't needed after import/reset
+  // replaces `state` with a new object tree. Listeners are attached exactly
+  // once (see wireInputs call in DOMContentLoaded); `syncers` lets us refresh
+  // displayed values after import/reset without re-attaching listeners.
+  const syncers = [];
+
+  function bindNumber(id, getter, setter) {
+    const el = document.getElementById(id);
+    const sync = function () { el.value = getter(); };
+    sync();
+    syncers.push(sync);
+    el.addEventListener("input", function () {
+      const v = el.value === "" ? 0 : Number(el.value);
+      setter(v);
+      saveState();
+      renderAll();
+    });
+  }
+  function bindCheckbox(id, getter, setter) {
+    const el = document.getElementById(id);
+    const sync = function () { el.checked = getter(); };
+    sync();
+    syncers.push(sync);
+    el.addEventListener("change", function () {
+      setter(el.checked);
+      saveState();
+      renderAll();
+    });
+  }
+  function bindSelectNumber(id, getter, setter) {
+    const el = document.getElementById(id);
+    const sync = function () { el.value = getter(); };
+    sync();
+    syncers.push(sync);
+    el.addEventListener("change", function () {
+      setter(Number(el.value));
+      saveState();
+      renderAll();
+    });
+  }
+  function syncStaticFields() {
+    syncers.forEach(function (fn) { fn(); });
+  }
+
+  function wireInputs() {
+    bindNumber("h-homePrice", function () { return state.housing.homePrice; }, function (v) { state.housing.homePrice = v; });
+    bindNumber("h-downPaymentPct", function () { return state.housing.downPaymentPct; }, function (v) { state.housing.downPaymentPct = v; });
+    bindNumber("h-interestRate", function () { return state.housing.interestRate; }, function (v) { state.housing.interestRate = v; });
+    bindSelectNumber("h-termYears", function () { return state.housing.termYears; }, function (v) { state.housing.termYears = v; });
+    bindNumber("h-propertyTaxRate", function () { return state.housing.propertyTaxRate; }, function (v) { state.housing.propertyTaxRate = v; });
+    bindNumber("h-homeInsuranceAnnual", function () { return state.housing.homeInsuranceAnnual; }, function (v) { state.housing.homeInsuranceAnnual = v; });
+    bindNumber("h-hoaMonthly", function () { return state.housing.hoaMonthly; }, function (v) { state.housing.hoaMonthly = v; });
+    bindNumber("h-pmiRate", function () { return state.housing.pmiRate; }, function (v) { state.housing.pmiRate = v; });
+    bindNumber("h-maintenanceRate", function () { return state.housing.maintenanceRate; }, function (v) { state.housing.maintenanceRate = v; });
+
+    bindNumber("c-originationPct", function () { return state.housing.closing.originationPct; }, function (v) { state.housing.closing.originationPct = v; });
+    bindNumber("c-pointsPct", function () { return state.housing.closing.pointsPct; }, function (v) { state.housing.closing.pointsPct = v; });
+    bindNumber("c-appraisalFee", function () { return state.housing.closing.appraisalFee; }, function (v) { state.housing.closing.appraisalFee = v; });
+    bindNumber("c-inspectionFee", function () { return state.housing.closing.inspectionFee; }, function (v) { state.housing.closing.inspectionFee = v; });
+    bindNumber("c-titleFee", function () { return state.housing.closing.titleFee; }, function (v) { state.housing.closing.titleFee = v; });
+    bindNumber("c-attorneyFee", function () { return state.housing.closing.attorneyFee; }, function (v) { state.housing.closing.attorneyFee = v; });
+    bindNumber("c-recordingFee", function () { return state.housing.closing.recordingFee; }, function (v) { state.housing.closing.recordingFee = v; });
+    bindNumber("c-transferTaxPct", function () { return state.housing.closing.transferTaxPct; }, function (v) { state.housing.closing.transferTaxPct = v; });
+    bindNumber("c-prepaidTaxMonths", function () { return state.housing.closing.prepaidTaxMonths; }, function (v) { state.housing.closing.prepaidTaxMonths = v; });
+    bindNumber("c-prepaidInsurance", function () { return state.housing.closing.prepaidInsurance; }, function (v) { state.housing.closing.prepaidInsurance = v; });
+    bindNumber("c-prepaidInterestDays", function () { return state.housing.closing.prepaidInterestDays; }, function (v) { state.housing.closing.prepaidInterestDays = v; });
+    bindNumber("c-otherClosing", function () { return state.housing.closing.otherClosing; }, function (v) { state.housing.closing.otherClosing = v; });
+
+    bindNumber("u-moving", function () { return state.housing.upfront.moving; }, function (v) { state.housing.upfront.moving = v; });
+    bindNumber("u-repairs", function () { return state.housing.upfront.repairs; }, function (v) { state.housing.upfront.repairs = v; });
+    bindNumber("u-furniture", function () { return state.housing.upfront.furniture; }, function (v) { state.housing.upfront.furniture = v; });
+    bindNumber("u-warranty", function () { return state.housing.upfront.warranty; }, function (v) { state.housing.upfront.warranty = v; });
+    bindNumber("u-utilityDeposits", function () { return state.housing.upfront.utilityDeposits; }, function (v) { state.housing.upfront.utilityDeposits = v; });
+    bindNumber("u-other", function () { return state.housing.upfront.other; }, function (v) { state.housing.upfront.other = v; });
+
+    bindNumber("s-grossRegularMonthly", function () { return state.surplus.grossRegularMonthly; }, function (v) { state.surplus.grossRegularMonthly = v; });
+    bindCheckbox("s-titheRegular", function () { return state.surplus.titheRegular; }, function (v) { state.surplus.titheRegular = v; });
+    bindNumber("s-grossBonusQuarterly", function () { return state.surplus.grossBonusQuarterly; }, function (v) { state.surplus.grossBonusQuarterly = v; });
+    bindCheckbox("s-titheBonus", function () { return state.surplus.titheBonus; }, function (v) { state.surplus.titheBonus = v; });
+    bindNumber("s-taxRate", function () { return state.surplus.taxRate; }, function (v) { state.surplus.taxRate = v; });
+    bindNumber("s-hsaMonthly", function () { return state.surplus.hsaMonthly; }, function (v) { state.surplus.hsaMonthly = v; });
+    bindNumber("s-healthInsuranceMonthly", function () { return state.surplus.healthInsuranceMonthly; }, function (v) { state.surplus.healthInsuranceMonthly = v; });
+    bindNumber("s-needs", function () { return state.surplus.needs; }, function (v) { state.surplus.needs = v; });
+    bindNumber("s-wants", function () { return state.surplus.wants; }, function (v) { state.surplus.wants = v; });
+    bindNumber("s-retirementPct", function () { return state.surplus.retirementPct; }, function (v) { state.surplus.retirementPct = v; });
+
+    document.getElementById("s-housingOverride").addEventListener("input", function (e) {
+      state.surplus.housingOverrideActive = true;
+      state.surplus.housingOverride = e.target.value === "" ? 0 : Number(e.target.value);
+      saveState();
+      renderAll();
+    });
+    document.getElementById("btn-reset-housing").addEventListener("click", function () {
+      state.surplus.housingOverrideActive = false;
+      state.surplus.housingOverride = null;
+      saveState();
+      renderAll();
+    });
+
+    document.getElementById("split-percent").addEventListener("click", function () { state.surplus.splitMode = "percent"; saveState(); renderAll(); });
+    document.getElementById("split-dollar").addEventListener("click", function () { state.surplus.splitMode = "dollar"; saveState(); renderAll(); });
+
+    document.getElementById("s-vacationPct").addEventListener("input", function (e) {
+      const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+      state.surplus.vacationPct = v;
+      state.surplus.payoffPct = 100 - v;
+      saveState();
+      renderAll();
+    });
+    bindNumber("s-vacationDollar", function () { return state.surplus.vacationDollar; }, function (v) { state.surplus.vacationDollar = v; });
+    bindNumber("s-payoffDollar", function () { return state.surplus.payoffDollar; }, function (v) { state.surplus.payoffDollar = v; });
+
+    bindNumber("r-currentAge", function () { return state.retirement.currentAge; }, function (v) { state.retirement.currentAge = v; });
+    bindNumber("r-retirementAge", function () { return state.retirement.retirementAge; }, function (v) { state.retirement.retirementAge = v; });
+    bindNumber("r-startingBalance", function () { return state.retirement.startingBalance; }, function (v) { state.retirement.startingBalance = v; });
+    bindNumber("r-returnRatePct", function () { return state.retirement.returnRatePct; }, function (v) { state.retirement.returnRatePct = v; });
+    bindNumber("r-employerMatchRatePct", function () { return state.retirement.employerMatchRatePct; }, function (v) { state.retirement.employerMatchRatePct = v; });
+    bindNumber("r-employerMatchCapPct", function () { return state.retirement.employerMatchCapPct; }, function (v) { state.retirement.employerMatchCapPct = v; });
+
+    document.getElementById("po-add-btn").addEventListener("click", function () {
+      const year = Number(document.getElementById("po-add-year").value);
+      const amount = Number(document.getElementById("po-add-amount").value) || 0;
+      if (!year) return;
+      state.payoff.extraByYear[year] = (Number(state.payoff.extraByYear[year]) || 0) + amount;
+      document.getElementById("po-add-amount").value = 0;
+      saveState();
+      renderAll();
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------
+  function renderHousing() {
+    const h = state.housing;
+    const out = computeHousing();
+
+    document.getElementById("h-downPaymentAmount").textContent = fmt$(out.downPaymentAmount);
+    document.getElementById("out-pi").textContent = fmt$(out.pi);
+    document.getElementById("out-tax").textContent = fmt$(out.monthlyPropertyTax);
+    document.getElementById("out-ins").textContent = fmt$(out.monthlyInsurance);
+    document.getElementById("out-hoa").textContent = fmt$(out.monthlyHOA);
+    document.getElementById("out-pmi").textContent = fmt$(out.monthlyPMI);
+    document.getElementById("out-maint").textContent = fmt$(out.monthlyMaintenance);
+    document.getElementById("out-total").textContent = fmt$(out.totalMonthly);
+
+    document.getElementById("out-pmi-note").textContent = h.downPaymentPct < 20
+      ? (out.pmiEndYear ? "PMI drops off in loan year " + out.pmiEndYear + ", once equity crosses ~80% LTV." : "PMI does not fully drop off within the loan term at this pace.")
+      : "No PMI — down payment is 20% or more.";
+
+    const surplus = computeSurplus();
+    const grossIncome = surplus.grossMonthlyCombined;
+    const affordPct = grossIncome ? (out.totalMonthly / grossIncome * 100) : 0;
+    const affordMax = grossIncome * 0.25;
+    const affordDelta = affordMax - out.totalMonthly;
+    document.getElementById("out-grossIncome").textContent = fmt$(grossIncome);
+    document.getElementById("out-affordPct").textContent = fmtPct(affordPct);
+    document.getElementById("out-affordMax").textContent = fmt$(affordMax);
+    document.getElementById("out-affordDelta").textContent = fmt$(affordDelta);
+    const statusEl = document.getElementById("out-affordStatus");
+    if (affordDelta >= 0) {
+      statusEl.innerHTML = '<span class="badge good">Within 25% guideline</span>';
+    } else {
+      statusEl.innerHTML = '<span class="badge bad">Exceeds 25% guideline</span>';
+    }
+
+    document.getElementById("out-cc-down").textContent = fmt$(out.downPaymentAmount);
+    document.getElementById("out-cc-closing").textContent = fmt$(out.closingSubtotal);
+    document.getElementById("out-cc-upfront").textContent = fmt$(out.upfrontSubtotal);
+    document.getElementById("out-cc-total").textContent = fmt$(out.totalCashToClose);
+
+    document.getElementById("out-pmiEndYear").textContent = out.pmiEndYear || "N/A";
+    const body = document.getElementById("out-amort-body");
+    body.innerHTML = "";
+    out.schedule.forEach(function (row) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + row.year + "</td><td>" + fmt$(row.beginBalance) + "</td><td>" + fmt$(row.principalPaid) +
+        "</td><td>" + fmt$(row.interestPaid) + "</td><td>" + fmt$(row.endBalance) + "</td><td>" +
+        (row.ltv !== null ? fmtPct(row.ltv) : "—") + "</td><td>" + (row.pmiActive ? "Yes" : "No") + "</td>";
+      body.appendChild(tr);
+    });
+  }
+
+  function renderSurplus() {
+    const s = state.surplus;
+    const out = computeSurplus();
+
+    document.getElementById("s-housingCalculated").textContent = fmt$(computeHousing().totalMonthly);
+    document.getElementById("s-housingOverride").value = s.housingOverrideActive ? s.housingOverride : Math.round(computeHousing().totalMonthly);
+
+    document.getElementById("s-retirementDollar").textContent = fmt$(out.retirementDollar) + " / month";
+
+    document.getElementById("out-surplusAnnual").textContent = fmt$(out.annualSurplus);
+    document.getElementById("out-surplusQuarterly").textContent = fmt$(out.quarterlySurplus);
+    document.getElementById("out-surplusMonthly").textContent = fmt$(out.monthlySurplus);
+
+    document.getElementById("split-percent").classList.toggle("active", s.splitMode === "percent");
+    document.getElementById("split-dollar").classList.toggle("active", s.splitMode === "dollar");
+    document.getElementById("split-percent-fields").style.display = s.splitMode === "percent" ? "flex" : "none";
+    document.getElementById("split-dollar-fields").style.display = s.splitMode === "dollar" ? "flex" : "none";
+    document.getElementById("s-vacationPct").value = s.vacationPct;
+    document.getElementById("s-payoffPct").value = s.payoffPct;
+    document.getElementById("s-vacationDollar").value = s.vacationDollar;
+    document.getElementById("s-payoffDollar").value = s.payoffDollar;
+
+    document.getElementById("out-vacationAnnual").textContent = fmt$(out.vacationAnnual);
+    document.getElementById("out-payoffAnnual").textContent = fmt$(out.payoffAnnual);
+  }
+
+  function renderPayoff() {
+    const h = state.housing;
+    const out = computePayoff();
+
+    document.getElementById("out-po-recurring").textContent = fmt$(out.recurringAnnual) + " / year";
+    document.getElementById("out-po-originalTerm").textContent = "Year " + out.originalTermYears;
+    document.getElementById("out-po-newYear").textContent = "Year " + out.payoffYear;
+    document.getElementById("out-po-interestSaved").textContent = fmt$(out.interestSaved);
+    document.getElementById("out-po-pmiEnd").textContent = h.downPaymentPct < 20 ? (out.pmiEndYearNew ? "Year " + out.pmiEndYearNew : "N/A") : "No PMI";
+
+    const yearSelect = document.getElementById("po-add-year");
+    const currentYearVal = yearSelect.value;
+    yearSelect.innerHTML = "";
+    for (let y = 1; y <= h.termYears; y++) {
+      const opt = document.createElement("option");
+      opt.value = y;
+      opt.textContent = "Year " + y;
+      yearSelect.appendChild(opt);
+    }
+    if (currentYearVal && Number(currentYearVal) <= h.termYears) yearSelect.value = currentYearVal;
+
+    const rowsBody = document.getElementById("po-rows");
+    rowsBody.innerHTML = "";
+    const years = Object.keys(state.payoff.extraByYear).map(Number).sort(function (a, b) { return a - b; });
+    if (years.length === 0) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = '<td colspan="3" style="text-align:center;color:var(--text-dim)">No manual extra amounts added</td>';
+      rowsBody.appendChild(tr);
+    }
+    years.forEach(function (year) {
+      const tr = document.createElement("tr");
+      const amt = state.payoff.extraByYear[year];
+      tr.innerHTML = "<td>Year " + year + "</td><td>" + fmt$(amt) + "</td><td></td>";
+      const removeTd = tr.lastElementChild;
+      const btn = document.createElement("button");
+      btn.className = "btn small danger";
+      btn.textContent = "Remove";
+      btn.type = "button";
+      btn.addEventListener("click", function () {
+        delete state.payoff.extraByYear[year];
+        saveState();
+        renderAll();
+      });
+      removeTd.appendChild(btn);
+      rowsBody.appendChild(tr);
+    });
+
+    const amortBody = document.getElementById("po-amort-body");
+    amortBody.innerHTML = "";
+    out.schedule.forEach(function (row) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + row.year + "</td><td>" + fmt$(row.beginBalance) + "</td><td>" + fmt$(row.extra) +
+        "</td><td>" + fmt$(row.principalPaid) + "</td><td>" + fmt$(row.interestPaid) + "</td><td>" +
+        fmt$(row.endBalance) + "</td><td>" + (row.ltv !== null ? fmtPct(row.ltv) : "—") + "</td><td>" +
+        (row.pmiActive ? "Yes" : "No") + "</td>";
+      amortBody.appendChild(tr);
+    });
+  }
+
+  function renderRetirement() {
+    const out = computeRetirement();
+    document.getElementById("out-r-yourContribution").textContent = fmt$(out.monthlyContribution);
+    document.getElementById("out-r-employerMatch").textContent = fmt$(out.employerMatchMonthly);
+    document.getElementById("out-r-totalContribution").textContent = fmt$(out.totalMonthlyContribution);
+    document.getElementById("out-r-years").textContent = (out.months / 12).toFixed(1);
+    document.getElementById("out-r-projected").textContent = fmt$(out.projectedBalance);
+    document.getElementById("out-r-contributed").textContent = fmt$(out.totalContributed);
+    document.getElementById("out-r-earned").textContent = fmt$(out.totalEarned);
+    renderRetirementChart(computeRetirementTimeline());
+  }
+
+  function renderRetirementChart(points) {
+    const wrap = document.getElementById("r-chart-wrap");
+    const legend = document.getElementById("r-chart-legend");
+    const tableBody = document.getElementById("r-chart-table-body");
+    const r = state.retirement;
+
+    document.getElementById("r-chart-startAge").textContent = r.currentAge;
+    document.getElementById("r-chart-endAge").textContent = r.retirementAge;
+
+    const seriesConfig = [
+      { key: "balance", label: "Balance", varName: "--series-balance" },
+      { key: "contributed", label: "Contributed", varName: "--series-contributed" },
+      { key: "earned", label: "Earned", varName: "--series-earned" }
+    ];
+
+    legend.innerHTML = "";
+    seriesConfig.forEach(function (s) {
+      const item = document.createElement("div");
+      item.className = "item";
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      sw.style.background = "var(" + s.varName + ")";
+      const label = document.createElement("span");
+      label.textContent = s.label;
+      item.appendChild(sw);
+      item.appendChild(label);
+      legend.appendChild(item);
+    });
+
+    tableBody.innerHTML = "";
+    points.forEach(function (p) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + Math.round(p.age) + "</td><td>" + fmt$(p.balance) + "</td><td>" + fmt$(p.contributed) + "</td><td>" + fmt$(p.earned) + "</td>";
+      tableBody.appendChild(tr);
+    });
+
+    if (points.length < 2) {
+      wrap.innerHTML = '<p class="hint">Set a retirement age after your current age to see the projection.</p>';
+      return;
+    }
+
+    const W = 900, H = 340;
+    const marginLeft = 60, marginRight = 86, marginTop = 16, marginBottom = 30;
+    const plotW = W - marginLeft - marginRight;
+    const plotH = H - marginTop - marginBottom;
+
+    const minAge = points[0].age, maxAge = points[points.length - 1].age;
+    const maxVal = Math.max.apply(null, points.map(function (p) { return Math.max(p.balance, p.contributed, p.earned); }));
+    const niceMax = niceCeil(maxVal || 1);
+
+    function xScale(age) { return marginLeft + (age - minAge) / ((maxAge - minAge) || 1) * plotW; }
+    function yScale(val) { return marginTop + plotH - (Math.max(val, 0) / niceMax) * plotH; }
+    function pathFor(key) {
+      return points.map(function (p, i) {
+        return (i === 0 ? "M" : "L") + xScale(p.age).toFixed(1) + "," + yScale(p[key]).toFixed(1);
+      }).join(" ");
+    }
+
+    const gridCount = 4;
+    let gridSvg = "";
+    for (let i = 0; i <= gridCount; i++) {
+      const val = niceMax * i / gridCount;
+      const y = yScale(val);
+      gridSvg += '<line x1="' + marginLeft + '" y1="' + y.toFixed(1) + '" x2="' + (W - marginRight) + '" y2="' + y.toFixed(1) + '" class="chart-grid"/>';
+      gridSvg += '<text x="' + (marginLeft - 8) + '" y="' + (y + 4).toFixed(1) + '" class="chart-axis-label" text-anchor="end">' + fmt$compact(val) + '</text>';
+    }
+
+    const xTicks = pickAgeTicks(minAge, maxAge);
+    let xSvg = '<line x1="' + marginLeft + '" y1="' + (H - marginBottom) + '" x2="' + (W - marginRight) + '" y2="' + (H - marginBottom) + '" class="chart-axis-baseline"/>';
+    xTicks.forEach(function (age) {
+      const x = xScale(age);
+      xSvg += '<text x="' + x.toFixed(1) + '" y="' + (H - marginBottom + 18) + '" class="chart-axis-label" text-anchor="middle">' + Math.round(age) + '</text>';
+    });
+
+    const areaPath = pathFor("balance") + " L " + xScale(maxAge).toFixed(1) + "," + yScale(0).toFixed(1) + " L " + xScale(minAge).toFixed(1) + "," + yScale(0).toFixed(1) + " Z";
+    let linesSvg = '<path class="chart-area" d="' + areaPath + '" style="fill:var(--series-balance)"></path>';
+    seriesConfig.forEach(function (s) {
+      linesSvg += '<path class="chart-line" d="' + pathFor(s.key) + '" style="stroke:var(' + s.varName + ')"></path>';
+    });
+
+    const last = points[points.length - 1];
+    const endItems = seriesConfig.map(function (s) {
+      return { key: s.key, label: s.label, varName: s.varName, y: yScale(last[s.key]), val: last[s.key] };
+    }).sort(function (a, b) { return a.y - b.y; });
+    const minGap = 13;
+    for (let i = 1; i < endItems.length; i++) {
+      if (endItems[i].y - endItems[i - 1].y < minGap) endItems[i].y = endItems[i - 1].y + minGap;
+    }
+    let endLabelsSvg = "";
+    endItems.forEach(function (item) {
+      endLabelsSvg += '<text x="' + (xScale(maxAge) + 8).toFixed(1) + '" y="' + (item.y + 4).toFixed(1) + '" class="chart-endlabel" style="fill:var(' + item.varName + ')">' + fmt$compact(item.val) + '</text>';
+    });
+
+    let dotsSvg = "";
+    seriesConfig.forEach(function (s) {
+      dotsSvg += '<circle class="chart-dot" data-key="' + s.key + '" r="4.5" style="fill:var(' + s.varName + ')"></circle>';
+    });
+
+    const svg = ''
+      + '<svg class="chart-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">'
+      + gridSvg
+      + xSvg
+      + linesSvg
+      + endLabelsSvg
+      + '<line class="chart-crosshair" x1="0" y1="' + marginTop + '" x2="0" y2="' + (H - marginBottom) + '"></line>'
+      + dotsSvg
+      + '<rect class="chart-hit" x="' + marginLeft + '" y="' + marginTop + '" width="' + plotW + '" height="' + plotH + '"></rect>'
+      + '</svg>';
+
+    wrap.innerHTML = svg;
+
+    const tooltip = document.createElement("div");
+    tooltip.className = "chart-tooltip";
+    wrap.appendChild(tooltip);
+
+    const svgEl = wrap.querySelector("svg");
+    const hitRect = wrap.querySelector(".chart-hit");
+    const crosshair = wrap.querySelector(".chart-crosshair");
+    const dotEls = {};
+    seriesConfig.forEach(function (s) {
+      dotEls[s.key] = wrap.querySelector('.chart-dot[data-key="' + s.key + '"]');
+    });
+
+    function nearestIndex(age) {
+      let best = 0, bestDist = Infinity;
+      points.forEach(function (p, i) {
+        const d = Math.abs(p.age - age);
+        if (d < bestDist) { bestDist = d; best = i; }
+      });
+      return best;
+    }
+
+    function showAt(clientX, clientY) {
+      const rect = svgEl.getBoundingClientRect();
+      const relX = (clientX - rect.left) / rect.width * W;
+      const age = minAge + (relX - marginLeft) / plotW * (maxAge - minAge);
+      const idx = nearestIndex(age);
+      const p = points[idx];
+      const x = xScale(p.age);
+
+      crosshair.setAttribute("x1", x.toFixed(1));
+      crosshair.setAttribute("x2", x.toFixed(1));
+      crosshair.style.opacity = 1;
+
+      seriesConfig.forEach(function (s) {
+        const dot = dotEls[s.key];
+        dot.setAttribute("cx", x.toFixed(1));
+        dot.setAttribute("cy", yScale(p[s.key]).toFixed(1));
+        dot.style.opacity = 1;
+      });
+
+      tooltip.innerHTML = "";
+      const ageRow = document.createElement("div");
+      ageRow.className = "tt-age";
+      ageRow.textContent = "Age " + Math.round(p.age);
+      tooltip.appendChild(ageRow);
+      seriesConfig.forEach(function (s) {
+        const row = document.createElement("div");
+        row.className = "tt-row";
+        const keyEl = document.createElement("span");
+        keyEl.className = "key";
+        const lineKey = document.createElement("span");
+        lineKey.className = "line-key";
+        lineKey.style.background = "var(" + s.varName + ")";
+        const labelEl = document.createElement("span");
+        labelEl.textContent = s.label;
+        keyEl.appendChild(lineKey);
+        keyEl.appendChild(labelEl);
+        const valueEl = document.createElement("span");
+        valueEl.className = "value";
+        valueEl.textContent = fmt$(p[s.key]);
+        row.appendChild(keyEl);
+        row.appendChild(valueEl);
+        tooltip.appendChild(row);
+      });
+
+      tooltip.style.opacity = 1;
+      const wrapRect = wrap.getBoundingClientRect();
+      const px = clientX - wrapRect.left;
+      const py = clientY - wrapRect.top;
+      const ttW = 180;
+      let left = px + 14;
+      if (left + ttW > wrapRect.width) left = px - ttW - 14;
+      tooltip.style.left = left + "px";
+      tooltip.style.top = Math.max(0, py - 50) + "px";
+    }
+
+    function hide() {
+      crosshair.style.opacity = 0;
+      seriesConfig.forEach(function (s) { dotEls[s.key].style.opacity = 0; });
+      tooltip.style.opacity = 0;
+    }
+
+    hitRect.addEventListener("pointermove", function (e) { showAt(e.clientX, e.clientY); });
+    hitRect.addEventListener("pointerleave", hide);
+  }
+
+  function renderAll() {
+    renderHousing();
+    renderSurplus();
+    renderPayoff();
+    renderRetirement();
+  }
+
+  // ---------------------------------------------------------------------
+  // Tabs
+  // ---------------------------------------------------------------------
+  function wireTabs() {
+    const buttons = document.querySelectorAll("nav.tabs button");
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        buttons.forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        document.querySelectorAll(".tabpanel").forEach(function (p) { p.classList.remove("active"); });
+        document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Export / Import / Reset
+  // ---------------------------------------------------------------------
+  function wireDataControls() {
+    document.getElementById("btn-export").addEventListener("click", function () {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = "home-lifestyle-finances-" + date + ".json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById("btn-import").addEventListener("click", function () {
+      document.getElementById("file-import").click();
+    });
+
+    document.getElementById("file-import").addEventListener("change", function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function () {
+        try {
+          const imported = JSON.parse(reader.result);
+          state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), imported);
+          saveState();
+          syncStaticFields();
+          renderAll();
+        } catch (err) {
+          alert("Could not read that file — make sure it's a JSON export from this app.");
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = "";
+    });
+
+    document.getElementById("btn-reset").addEventListener("click", function () {
+      if (!confirm("Reset all inputs to defaults? This clears everything currently saved.")) return;
+      state = JSON.parse(JSON.stringify(DEFAULTS));
+      saveState();
+      syncStaticFields();
+      renderAll();
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------
+  document.addEventListener("DOMContentLoaded", function () {
+    loadState();
+    wireTabs();
+    wireDataControls();
+    wireInputs();
+    renderAll();
+  });
+})();
+</script>
+
+</body>
+</html>
