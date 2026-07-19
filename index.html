@@ -435,6 +435,11 @@
         <div class="stat"><span>Quarterly</span><span class="val" id="out-surplusQuarterly"></span></div>
         <div class="stat total"><span>Monthly</span><span class="val" id="out-surplusMonthly"></span></div>
         <div class="note">Annual surplus = (net regular pay &times; 12) + (net bonus pay &times; 4) &minus; (needs + wants + housing + retirement) &times; 12 &minus; tithe.</div>
+
+        <h3>Where it goes (annual)</h3>
+        <div class="stat"><span>Needs + wants + housing + retirement</span><span class="val" id="out-deductionsAnnual"></span></div>
+        <div class="stat"><span>Tithe</span><span class="val" id="out-titheAnnual"></span></div>
+        <div class="stat"><span>Taxes</span><span class="val" id="out-taxAnnual"></span></div>
       </div>
 
       <div class="card full-width">
@@ -826,10 +831,12 @@
 
     const taxRate = s.taxRate / 100;
     const taxableRegular = s.grossRegularMonthly - s.hsaMonthly - s.healthInsuranceMonthly;
-    const netRegularPretithe = taxableRegular - taxableRegular * taxRate;
+    const taxRegularMonthly = taxableRegular * taxRate;
+    const netRegularPretithe = taxableRegular - taxRegularMonthly;
 
     const taxableBonus = s.grossBonusQuarterly;
-    const netBonusPretithe = taxableBonus - taxableBonus * taxRate;
+    const taxBonusQuarterly = taxableBonus * taxRate;
+    const netBonusPretithe = taxableBonus - taxBonusQuarterly;
 
     const grossMonthlyCombined = s.grossRegularMonthly + s.grossBonusQuarterly / 3;
     const retirementDollar = grossMonthlyCombined * (s.retirementPct / 100);
@@ -838,6 +845,7 @@
     const annualDeductions = (s.needs + s.wants + housingCost + retirementDollar) * 12;
     const titheAnnual = (s.titheRegular ? s.grossRegularMonthly * 12 * 0.10 : 0) +
       (s.titheBonus ? s.grossBonusQuarterly * 4 * 0.10 : 0);
+    const taxAnnual = taxRegularMonthly * 12 + taxBonusQuarterly * 4;
 
     const annualSurplus = annualPretithe - annualDeductions - titheAnnual;
     const quarterlySurplus = annualSurplus / 4;
@@ -855,7 +863,8 @@
     return {
       housingCost: housingCost, retirementDollar: retirementDollar, grossMonthlyCombined: grossMonthlyCombined,
       annualSurplus: annualSurplus, quarterlySurplus: quarterlySurplus, monthlySurplus: monthlySurplus,
-      vacationAnnual: vacationAnnual, payoffAnnual: payoffAnnual
+      vacationAnnual: vacationAnnual, payoffAnnual: payoffAnnual,
+      annualDeductions: annualDeductions, titheAnnual: titheAnnual, taxAnnual: taxAnnual
     };
   }
 
@@ -1136,6 +1145,10 @@
     document.getElementById("out-surplusAnnual").textContent = fmt$(out.annualSurplus);
     document.getElementById("out-surplusQuarterly").textContent = fmt$(out.quarterlySurplus);
     document.getElementById("out-surplusMonthly").textContent = fmt$(out.monthlySurplus);
+
+    document.getElementById("out-deductionsAnnual").textContent = fmt$(out.annualDeductions);
+    document.getElementById("out-titheAnnual").textContent = fmt$(out.titheAnnual);
+    document.getElementById("out-taxAnnual").textContent = fmt$(out.taxAnnual);
 
     document.getElementById("split-percent").classList.toggle("active", s.splitMode === "percent");
     document.getElementById("split-dollar").classList.toggle("active", s.splitMode === "dollar");
