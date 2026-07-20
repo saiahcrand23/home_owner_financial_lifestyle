@@ -151,6 +151,7 @@
   .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.76rem; font-weight: 600; }
   .badge.good { background: rgba(26,127,55,0.15); color: var(--good); }
   .badge.bad { background: rgba(207,34,46,0.15); color: var(--bad); }
+  .badge.neutral { background: var(--accent-dim); color: var(--accent); }
   .radio-toggle { display: flex; gap: 6px; margin-bottom: 14px; }
   .radio-toggle button {
     flex: 1;
@@ -200,6 +201,36 @@
   .chart-tooltip .tt-row .key { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
   .chart-tooltip .tt-row .line-key { width: 11px; height: 2px; display: inline-block; border-radius: 2px; }
   .chart-tooltip .tt-row .value { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .subcard { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: var(--bg); }
+  .subcard-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .subcard-header .title { font-size: 0.85rem; font-weight: 600; flex: 1; }
+  .empty-msg { font-size: 0.85rem; color: var(--text-dim); text-align: center; padding: 14px 0; }
+
+  #g-loans-wrap, #g-emerg-wrap, #g-house-wrap, #g-hysa-wrap { display: none; }
+  #g-loans-wrap.on, #g-emerg-wrap.on, #g-house-wrap.on, #g-hysa-wrap.on { display: block; }
+
+  .g-warning { background: var(--accent-dim); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; font-size: 0.85rem; color: var(--text); margin-bottom: 12px; }
+  .g-timeline { display: flex; align-items: stretch; margin: 4px 0 16px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); min-height: 42px; }
+  .g-tlseg { display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; padding: 8px 4px; text-align: center; min-width: 2px; color: var(--text); }
+  .g-phase { border-radius: var(--radius); padding: 18px; text-align: center; margin-bottom: 12px; border: 1px solid var(--border); position: relative; }
+  .g-phase::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: var(--radius) var(--radius) 0 0; }
+  .g-phase-title { font-size: 0.76rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 6px; color: var(--text-dim); }
+  .g-phase-date { font-size: 1.3rem; font-weight: 600; letter-spacing: -0.02em; color: var(--text); margin: 0 0 4px; }
+  .g-phase-sub { font-size: 0.82rem; color: var(--text-dim); margin: 0 0 14px; }
+  .g-stat-row { display: flex; justify-content: center; gap: 22px; flex-wrap: wrap; }
+  .g-stat { text-align: center; }
+  .g-stat-val { font-size: 0.95rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+  .g-stat-lbl { font-size: 0.72rem; color: var(--text-dim); margin-top: 2px; }
+  .g-tl-loan, .g-phase-loan::before { background: var(--series-balance); }
+  .g-tl-emerg, .g-phase-emerg::before { background: var(--series-contributed); }
+  .g-tl-house, .g-phase-house::before { background: var(--series-earned); }
+  .g-tl-loan { background: color-mix(in srgb, var(--series-balance) 22%, var(--panel)); }
+  .g-tl-emerg { background: color-mix(in srgb, var(--series-contributed) 22%, var(--panel)); }
+  .g-tl-house { background: color-mix(in srgb, var(--series-earned) 22%, var(--panel)); }
+  .g-phase-loan { background: color-mix(in srgb, var(--series-balance) 8%, var(--panel)); }
+  .g-phase-emerg { background: color-mix(in srgb, var(--series-contributed) 8%, var(--panel)); }
+  .g-phase-house { background: color-mix(in srgb, var(--series-earned) 8%, var(--panel)); }
 </style>
 </head>
 <body>
@@ -215,7 +246,8 @@
 </header>
 
 <nav class="tabs">
-  <button data-tab="housing" class="active">Home Buying</button>
+  <button data-tab="goals" class="active">Financial Goals</button>
+  <button data-tab="housing">Home Buying</button>
   <button data-tab="surplus">Surplus</button>
   <button data-tab="payoff">House Payoff</button>
   <button data-tab="retirement">Retirement</button>
@@ -223,8 +255,77 @@
 
 <main>
 
+  <!-- ===================== FINANCIAL GOALS ===================== -->
+  <section class="tabpanel active" id="tab-goals">
+    <div class="grid">
+
+      <div class="card full-width">
+        <h2>Contributions</h2>
+        <p class="hint">Each rule applies across all enabled goals below, in sequence &mdash; leftover cash after each goal rolls forward automatically to the next.</p>
+        <div id="g-contrib-list"></div>
+        <button class="btn" id="g-add-contrib" type="button">+ Add contribution</button>
+      </div>
+
+      <div class="card">
+        <h2>Loans</h2>
+        <div class="checkbox-row">
+          <input type="checkbox" id="g-loansEnabled">
+          <label for="g-loansEnabled">Include a loan payoff goal</label>
+        </div>
+        <div id="g-loans-wrap">
+          <div id="g-loan-list"></div>
+          <button class="btn" id="g-add-loan" type="button">+ Add loan</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Savings goals</h2>
+        <h3>Emergency fund</h3>
+        <div class="checkbox-row">
+          <input type="checkbox" id="g-emergEnabled">
+          <label for="g-emergEnabled">Include an emergency fund goal</label>
+        </div>
+        <div id="g-emerg-wrap" class="field">
+          <label>Emergency fund target ($)</label>
+          <input type="number" id="g-emergGoal" step="100" min="0">
+        </div>
+        <h3>House down payment</h3>
+        <div class="checkbox-row">
+          <input type="checkbox" id="g-houseEnabled">
+          <label for="g-houseEnabled">Include a house down payment goal</label>
+        </div>
+        <div id="g-house-wrap" class="field">
+          <label>Savings target ($) <span style="font-weight:400;color:var(--text-dim)">(optional)</span></label>
+          <input type="number" id="g-houseGoal" step="100" min="0">
+          <div class="sub">Leave blank to just track accumulated savings through your last contribution &mdash; a target shows when you reach it.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>High-yield savings account</h2>
+        <div class="checkbox-row">
+          <input type="checkbox" id="g-hysaEnabled">
+          <label for="g-hysaEnabled">I have a HYSA</label>
+        </div>
+        <div id="g-hysa-wrap" class="field">
+          <label>HYSA APY (%)</label>
+          <input type="number" id="g-apy" step="0.01" min="0">
+          <div class="sub">Interest compounds daily on savings-phase balances, credited on the last day of each month.</div>
+        </div>
+      </div>
+
+      <div class="card full-width">
+        <h2>Timeline</h2>
+        <p class="hint">Simulates month by month: loans first, then emergency fund, then house down payment &mdash; using the contribution rules above.</p>
+        <button class="btn primary" id="g-calculate" type="button">Calculate my timeline</button>
+        <div id="g-result-area"></div>
+      </div>
+
+    </div>
+  </section>
+
   <!-- ===================== HOME BUYING ===================== -->
-  <section class="tabpanel active" id="tab-housing">
+  <section class="tabpanel" id="tab-housing">
     <div class="grid">
 
       <div class="card">
@@ -629,6 +730,19 @@
   // Default state
   // ---------------------------------------------------------------------
   const DEFAULTS = {
+    goals: {
+      loansEnabled: true,
+      emergEnabled: false,
+      houseEnabled: false,
+      hysaEnabled: false,
+      emergGoal: 0,
+      houseGoal: null,
+      apy: 0,
+      loanId: 0,
+      contribId: 0,
+      loans: [],
+      contribs: []
+    },
     housing: {
       homePrice: 400000,
       downPaymentPct: 5,
@@ -767,6 +881,223 @@
     for (let a = minAge; a < maxAge; a += step) ticks.push(a);
     ticks.push(maxAge);
     return ticks;
+  }
+
+  // ---------------------------------------------------------------------
+  // Financial Goals calculation engine
+  // ---------------------------------------------------------------------
+  function goalsDaysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
+  function goalsHysaInt(bal, apy, y, m) {
+    if (!apy || bal <= 0) return 0;
+    return bal * (Math.pow(1 + apy / 100 / 365, goalsDaysInMonth(y, m)) - 1);
+  }
+  function goalsParseYM(str) {
+    if (!str) return null;
+    const parts = str.split("-").map(Number);
+    return new Date(parts[0], parts[1] - 1, 1);
+  }
+  function goalsParseYMD(str) {
+    if (!str) return null;
+    const parts = str.split("-").map(Number);
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+  }
+  function goalsFmtDate(d) { return d.toLocaleString("default", { month: "long", year: "numeric" }); }
+  function goalsMonthKey(d) { return d.getFullYear() * 12 + d.getMonth(); }
+  function goalsAddMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
+
+  function goalsBuildCashMap(contribs, simStart, simEnd) {
+    const map = new Map();
+    const add = function (d, amt) {
+      if (!d || d < simStart || (simEnd && d > simEnd)) return;
+      const k = goalsMonthKey(d);
+      map.set(k, (map.get(k) || 0) + amt);
+    };
+    contribs.forEach(function (c) {
+      const amt = parseFloat(c.amt) || 0;
+      if (!amt) return;
+      const freq = c.freq || "monthly";
+      if (freq === "oneoff") {
+        if (!c.day) return;
+        const d = goalsParseYMD(c.day);
+        if (d) add(new Date(d.getFullYear(), d.getMonth(), 1), amt);
+        return;
+      }
+      const startD = goalsParseYM(c.start);
+      if (!startD) return;
+      const endD = c.end ? goalsParseYM(c.end) : null;
+      const step = { monthly: 1, biweekly: 1, quarterly: 3, annually: 12 }[freq] || 1;
+      const multiplier = freq === "biweekly" ? 26 / 12 : 1;
+      let cur = new Date(startD);
+      while ((!endD || cur <= endD) && (!simEnd || cur <= simEnd)) {
+        add(new Date(cur), amt * multiplier);
+        cur = goalsAddMonths(cur, step);
+      }
+    });
+    return map;
+  }
+
+  // Pure simulation — returns { error } on invalid input, otherwise a result
+  // object describing each enabled goal's phase (rendered separately).
+  function computeGoalsTimeline() {
+    const g = state.goals;
+
+    if (!g.loansEnabled && !g.emergEnabled && !g.houseEnabled) {
+      return { error: "Enable at least one goal to calculate your timeline." };
+    }
+    if (!g.contribs.length) {
+      return { error: "Add at least one contribution rule." };
+    }
+
+    const loanData = g.loansEnabled ? g.loans.map(function (l) {
+      return { balance: parseFloat(l.bal) || 0, rate: parseFloat(l.rate) || 0, minPay: parseFloat(l.minPay) || 0 };
+    }) : [];
+
+    if (g.loansEnabled && (!loanData.length || loanData.every(function (l) { return l.balance <= 0; }))) {
+      return { error: "Enter a balance for at least one loan, or disable the Loans goal." };
+    }
+    const emergGoal = g.emergEnabled ? (parseFloat(g.emergGoal) || 0) : 0;
+    if (g.emergEnabled && emergGoal <= 0) {
+      return { error: "Enter an emergency fund target, or disable the Emergency Fund goal." };
+    }
+    const houseGoal = g.houseEnabled ? (parseFloat(g.houseGoal) || 0) : 0;
+    const apy = g.hysaEnabled ? (parseFloat(g.apy) || 0) : 0;
+
+    let simStart = null;
+    g.contribs.forEach(function (c) {
+      const d = c.freq === "oneoff" ? (c.day ? goalsParseYMD(c.day) : null) : goalsParseYM(c.start);
+      if (d && (!simStart || d < simStart)) simStart = new Date(d.getFullYear(), d.getMonth(), 1);
+    });
+    if (!simStart) return { error: "Set a start date on at least one contribution." };
+
+    const simEnd = goalsAddMonths(simStart, 600);
+    const cashMap = goalsBuildCashMap(g.contribs, simStart, simEnd);
+
+    let remainingBalances = loanData.map(function (l) { return { rem: l.balance, rate: l.rate, minPay: l.minPay }; });
+    let hysaBal = 0;
+    let totalLoanInterest = 0, totalLoanPayments = 0;
+    let minCoverageWarning = false;
+    let loanPhaseEnd = null, loanMonthCount = 0;
+    let emergPhaseEnd = null, emergMonthCount = 0, emergInterest = 0, emergReachedBal = 0, emergExcess = 0;
+    let houseInterest = 0, houseMonthCount = 0, houseFinalBal = 0, houseFinalDate = null, houseGoalDate = null, houseGoalMonthCount = 0, houseGoalBal = 0;
+    let emergDone = !g.emergEnabled || !emergGoal;
+    let loansDone = !g.loansEnabled || loanData.every(function (l) { return l.balance <= 0; });
+
+    let cur = new Date(simStart);
+    let monthIdx = 0;
+    const MAX = 600;
+
+    let lastCashMonth = simStart;
+    cashMap.forEach(function (_, k) {
+      const y = Math.floor(k / 12), m = k % 12;
+      const d = new Date(y, m, 1);
+      if (d > lastCashMonth) lastCashMonth = d;
+    });
+
+    while (monthIdx < MAX) {
+      const k = goalsMonthKey(cur);
+      let cashLeft = cashMap.get(k) || 0;
+      let loanJustDone = false, emergJustDone = false;
+
+      if (!loansDone) {
+        const totalMin = remainingBalances.reduce(function (s, l) { return l.rem > 0 ? s + Math.min(l.minPay, l.rem) : s; }, 0);
+        if (cashLeft < totalMin) minCoverageWarning = true;
+        remainingBalances.forEach(function (l) {
+          if (l.rem <= 0) return;
+          const interest = l.rem * (l.rate / 100 / 12);
+          l.rem += interest; totalLoanInterest += interest;
+          const pay = Math.min(l.minPay, l.rem);
+          l.rem = Math.max(0, l.rem - pay);
+          totalLoanPayments += pay;
+          cashLeft = Math.max(0, cashLeft - pay);
+        });
+        remainingBalances.forEach(function (l) {
+          if (l.rem <= 0 || cashLeft <= 0) return;
+          const pay = Math.min(cashLeft, l.rem);
+          l.rem = Math.max(0, l.rem - pay);
+          totalLoanPayments += pay;
+          cashLeft -= pay;
+        });
+        if (remainingBalances.every(function (l) { return l.rem <= 0.005; })) {
+          loansDone = true;
+          loanJustDone = true;
+          loanPhaseEnd = goalsFmtDate(cur);
+          loanMonthCount = monthIdx;
+          hysaBal += Math.max(0, cashLeft);
+          cashLeft = 0;
+        }
+      }
+
+      if (loansDone && !loanJustDone && !emergDone) {
+        hysaBal += cashLeft; cashLeft = 0;
+        const int = goalsHysaInt(hysaBal, apy, cur.getFullYear(), cur.getMonth());
+        hysaBal += int; emergInterest += int;
+        emergMonthCount++;
+        if (hysaBal >= emergGoal) {
+          emergDone = true;
+          emergJustDone = true;
+          emergPhaseEnd = goalsFmtDate(cur);
+          emergReachedBal = hysaBal;
+          emergExcess = hysaBal - emergGoal;
+          hysaBal = emergExcess;
+        }
+      }
+
+      if (loansDone && !loanJustDone && emergDone && !emergJustDone && g.houseEnabled) {
+        hysaBal += cashLeft; cashLeft = 0;
+        const int = goalsHysaInt(hysaBal, apy, cur.getFullYear(), cur.getMonth());
+        hysaBal += int; houseInterest += int;
+        houseFinalBal = hysaBal;
+        houseFinalDate = goalsFmtDate(cur);
+        houseMonthCount++;
+        if (houseGoal > 0 && hysaBal >= houseGoal && !houseGoalDate) {
+          houseGoalDate = goalsFmtDate(cur);
+          houseGoalMonthCount = houseMonthCount;
+          houseGoalBal = hysaBal;
+        }
+      }
+
+      monthIdx++;
+      cur = goalsAddMonths(cur, 1);
+      if (loansDone && emergDone) {
+        if (g.houseEnabled && houseGoal > 0 && houseGoalDate) break;
+        if (!g.houseEnabled || cur > lastCashMonth) break;
+      }
+      if (monthIdx >= MAX) break;
+    }
+
+    if (g.loansEnabled && !loansDone) return { error: "Contributions aren't enough to pay off the loans within 50 years. Increase contribution amounts or required payments." };
+    if (g.emergEnabled && emergGoal > 0 && !emergDone) return { error: "Emergency fund goal not reached within the contribution window. Add more contributions or extend their end dates." };
+
+    const showLoans = g.loansEnabled && loanData.some(function (l) { return l.balance > 0; });
+    const showEmerg = g.emergEnabled && emergGoal > 0;
+    const showHouse = g.houseEnabled;
+    let gn = 1;
+    const loanGn = showLoans ? gn++ : null;
+    const emergGn = showEmerg ? gn++ : null;
+    const houseGn = gn;
+
+    const segs = [];
+    if (showLoans) segs.push({ cls: "g-tl-loan", label: "Loan", count: loanMonthCount });
+    if (showEmerg) segs.push({ cls: "g-tl-emerg", label: "E-Fund", count: emergMonthCount });
+    if (showHouse) segs.push({ cls: "g-tl-house", label: "Down Pmt", count: houseMonthCount || 1 });
+    const totalM = segs.reduce(function (s, x) { return s + x.count; }, 0) || 1;
+    let usedPct = 0;
+    segs.forEach(function (seg, i) {
+      seg.pct = i === segs.length - 1 ? Math.max(2, 100 - usedPct) : Math.max(2, Math.round(seg.count / totalM * 100));
+      usedPct += seg.pct;
+    });
+
+    return {
+      error: null, warning: minCoverageWarning,
+      segs: segs,
+      showLoans: showLoans, showEmerg: showEmerg, showHouse: showHouse,
+      loanGn: loanGn, emergGn: emergGn, houseGn: houseGn,
+      loanPhaseEnd: loanPhaseEnd, loanMonthCount: loanMonthCount, totalLoanInterest: totalLoanInterest, totalLoanPayments: totalLoanPayments,
+      emergGoal: emergGoal, emergPhaseEnd: emergPhaseEnd, emergMonthCount: emergMonthCount, emergReachedBal: emergReachedBal, emergInterest: emergInterest, emergExcess: emergExcess,
+      apy: apy,
+      houseGoal: houseGoal, houseGoalDate: houseGoalDate, houseGoalMonthCount: houseGoalMonthCount, houseGoalBal: houseGoalBal,
+      houseInterest: houseInterest, houseMonthCount: houseMonthCount, houseFinalBal: houseFinalBal, houseFinalDate: houseFinalDate
+    };
   }
 
   // ---------------------------------------------------------------------
@@ -1061,6 +1392,30 @@
   }
 
   function wireInputs() {
+    bindCheckbox("g-loansEnabled", function () { return state.goals.loansEnabled; }, function (v) { state.goals.loansEnabled = v; });
+    bindCheckbox("g-emergEnabled", function () { return state.goals.emergEnabled; }, function (v) { state.goals.emergEnabled = v; });
+    bindCheckbox("g-houseEnabled", function () { return state.goals.houseEnabled; }, function (v) { state.goals.houseEnabled = v; });
+    bindCheckbox("g-hysaEnabled", function () { return state.goals.hysaEnabled; }, function (v) { state.goals.hysaEnabled = v; });
+    bindNumber("g-emergGoal", function () { return state.goals.emergGoal; }, function (v) { state.goals.emergGoal = v; });
+    bindNumber("g-houseGoal", function () { return state.goals.houseGoal; }, function (v) { state.goals.houseGoal = v; });
+    bindNumber("g-apy", function () { return state.goals.apy; }, function (v) { state.goals.apy = v; });
+
+    document.getElementById("g-add-loan").addEventListener("click", function () {
+      state.goals.loanId += 1;
+      state.goals.loans.push({ id: state.goals.loanId, bal: "", rate: "", minPay: "" });
+      saveState();
+      renderAll();
+    });
+    document.getElementById("g-add-contrib").addEventListener("click", function () {
+      state.goals.contribId += 1;
+      state.goals.contribs.push({ id: state.goals.contribId, freq: "monthly", amt: "", start: "", end: "", day: "" });
+      saveState();
+      renderAll();
+    });
+    document.getElementById("g-calculate").addEventListener("click", function () {
+      renderGoalsResult();
+    });
+
     bindNumber("h-homePrice", function () { return state.housing.homePrice; }, function (v) { state.housing.homePrice = v; });
     bindNumber("h-downPaymentPct", function () { return state.housing.downPaymentPct; }, function (v) { state.housing.downPaymentPct = v; });
     bindNumber("h-interestRate", function () { return state.housing.interestRate; }, function (v) { state.housing.interestRate = v; });
@@ -1159,6 +1514,270 @@
   // ---------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------
+  const GOALS_FREQ_LABELS = { monthly: "Monthly", biweekly: "Bi-weekly", quarterly: "Quarterly", annually: "Annually", oneoff: "One-time" };
+
+  function renderGoals() {
+    const g = state.goals;
+    document.getElementById("g-loans-wrap").classList.toggle("on", g.loansEnabled);
+    document.getElementById("g-emerg-wrap").classList.toggle("on", g.emergEnabled);
+    document.getElementById("g-house-wrap").classList.toggle("on", g.houseEnabled);
+    document.getElementById("g-hysa-wrap").classList.toggle("on", g.hysaEnabled);
+    renderGoalsLoanList();
+    renderGoalsContribList();
+  }
+
+  // Field-level edits inside these rows only update state + saveState() —
+  // they deliberately skip renderAll(), since rebuilding the row DOM on
+  // every keystroke (as renderAll() would) would steal focus mid-type.
+  // Only structural changes (add/remove/frequency) rebuild the list.
+  function renderGoalsLoanList() {
+    const loans = state.goals.loans;
+    const listEl = document.getElementById("g-loan-list");
+    listEl.innerHTML = "";
+    if (!loans.length) {
+      listEl.innerHTML = '<p class="empty-msg">No loans added yet</p>';
+      return;
+    }
+    loans.forEach(function (l, i) {
+      const card = document.createElement("div");
+      card.className = "subcard";
+      card.innerHTML =
+        '<div class="subcard-header"><span class="title">Loan ' + (i + 1) + '</span></div>' +
+        '<div class="field-row">' +
+        '<div class="field"><label>Balance ($)</label><input type="number" step="0.01" min="0" class="g-loan-bal"></div>' +
+        '<div class="field"><label>Annual interest rate (%)</label><input type="number" step="0.01" min="0" class="g-loan-rate"></div>' +
+        '<div class="field"><label>Required monthly payment ($)</label><input type="number" step="0.01" min="0" class="g-loan-min"></div>' +
+        '</div>';
+
+      const header = card.querySelector(".subcard-header");
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn small danger";
+      removeBtn.type = "button";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", function () {
+        state.goals.loans = state.goals.loans.filter(function (x) { return x.id !== l.id; });
+        saveState();
+        renderAll();
+      });
+      header.appendChild(removeBtn);
+
+      const balInput = card.querySelector(".g-loan-bal");
+      const rateInput = card.querySelector(".g-loan-rate");
+      const minInput = card.querySelector(".g-loan-min");
+      balInput.value = l.bal;
+      rateInput.value = l.rate;
+      minInput.value = l.minPay;
+      balInput.addEventListener("input", function (e) { l.bal = e.target.value; saveState(); });
+      rateInput.addEventListener("input", function (e) { l.rate = e.target.value; saveState(); });
+      minInput.addEventListener("input", function (e) { l.minPay = e.target.value; saveState(); });
+
+      listEl.appendChild(card);
+    });
+  }
+
+  function renderGoalsContribList() {
+    const contribs = state.goals.contribs;
+    const listEl = document.getElementById("g-contrib-list");
+    listEl.innerHTML = "";
+    if (!contribs.length) {
+      listEl.innerHTML = '<p class="empty-msg">No contributions added yet</p>';
+      return;
+    }
+    contribs.forEach(function (c, i) {
+      const freq = c.freq || "monthly";
+      const isOneoff = freq === "oneoff";
+      const card = document.createElement("div");
+      card.className = "subcard";
+
+      let fieldsHtml = '<div class="field-row">' +
+        '<div class="field"><label>Amount ($)</label><input type="number" step="0.01" min="0" class="g-c-amt"></div>' +
+        '<div class="field"><label>Frequency</label><select class="g-c-freq">' +
+        Object.keys(GOALS_FREQ_LABELS).map(function (f) {
+          return '<option value="' + f + '"' + (f === freq ? " selected" : "") + '>' + GOALS_FREQ_LABELS[f] + '</option>';
+        }).join("") +
+        '</select></div></div>';
+
+      if (isOneoff) {
+        fieldsHtml += '<div class="field"><label>Date</label><input type="date" class="g-c-day"></div>';
+      } else {
+        fieldsHtml += '<div class="field-row">' +
+          '<div class="field"><label>Start month</label><input type="month" class="g-c-start"></div>' +
+          '<div class="field"><label>End month (optional)</label><input type="month" class="g-c-end"></div>' +
+          '</div>';
+      }
+
+      card.innerHTML = '<div class="subcard-header"><span class="title">Contribution ' + (i + 1) +
+        '</span><span class="badge neutral">' + GOALS_FREQ_LABELS[freq] + '</span></div>' + fieldsHtml;
+
+      const header = card.querySelector(".subcard-header");
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn small danger";
+      removeBtn.type = "button";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", function () {
+        state.goals.contribs = state.goals.contribs.filter(function (x) { return x.id !== c.id; });
+        saveState();
+        renderAll();
+      });
+      header.appendChild(removeBtn);
+
+      const amtInput = card.querySelector(".g-c-amt");
+      amtInput.value = c.amt;
+      amtInput.addEventListener("input", function (e) { c.amt = e.target.value; saveState(); });
+
+      const freqSelect = card.querySelector(".g-c-freq");
+      freqSelect.addEventListener("change", function (e) {
+        c.freq = e.target.value;
+        saveState();
+        renderAll();
+      });
+
+      if (isOneoff) {
+        const dayInput = card.querySelector(".g-c-day");
+        dayInput.value = c.day || "";
+        dayInput.addEventListener("input", function (e) { c.day = e.target.value; saveState(); });
+      } else {
+        const startInput = card.querySelector(".g-c-start");
+        const endInput = card.querySelector(".g-c-end");
+        startInput.value = c.start || "";
+        endInput.value = c.end || "";
+        startInput.addEventListener("input", function (e) { c.start = e.target.value; saveState(); });
+        endInput.addEventListener("input", function (e) { c.end = e.target.value; saveState(); });
+      }
+
+      listEl.appendChild(card);
+    });
+  }
+
+  function buildGoalsPhaseBlock(spec) {
+    const block = document.createElement("div");
+    block.className = "g-phase " + spec.cls;
+    const title = document.createElement("p");
+    title.className = "g-phase-title";
+    title.textContent = spec.title;
+    const date = document.createElement("p");
+    date.className = "g-phase-date";
+    date.textContent = spec.date;
+    const sub = document.createElement("p");
+    sub.className = "g-phase-sub";
+    sub.textContent = spec.sub;
+    const statRow = document.createElement("div");
+    statRow.className = "g-stat-row";
+    spec.stats.forEach(function (s) {
+      const stat = document.createElement("div");
+      stat.className = "g-stat";
+      const val = document.createElement("div");
+      val.className = "g-stat-val";
+      val.textContent = s.val;
+      const lbl = document.createElement("div");
+      lbl.className = "g-stat-lbl";
+      lbl.textContent = s.lbl;
+      stat.appendChild(val);
+      stat.appendChild(lbl);
+      statRow.appendChild(stat);
+    });
+    block.appendChild(title);
+    block.appendChild(date);
+    block.appendChild(sub);
+    block.appendChild(statRow);
+    return block;
+  }
+
+  // Only runs when "Calculate my timeline" is clicked — not on every
+  // keystroke — since it's a month-by-month simulation, not a closed-form
+  // formula, and results shouldn't flash/reset while someone is still typing.
+  function renderGoalsResult() {
+    const resultArea = document.getElementById("g-result-area");
+    const result = computeGoalsTimeline();
+    resultArea.innerHTML = "";
+
+    if (result.error) {
+      const warn = document.createElement("div");
+      warn.className = "g-warning";
+      warn.textContent = result.error;
+      resultArea.appendChild(warn);
+      return;
+    }
+
+    if (result.warning) {
+      const warn = document.createElement("div");
+      warn.className = "g-warning";
+      warn.textContent = "In some months your contributions didn't fully cover all minimum loan payments — results may be optimistic. Consider increasing your contribution amounts.";
+      resultArea.appendChild(warn);
+    }
+
+    const timeline = document.createElement("div");
+    timeline.className = "g-timeline";
+    result.segs.forEach(function (seg) {
+      const segEl = document.createElement("div");
+      segEl.className = "g-tlseg " + seg.cls;
+      segEl.style.flex = seg.pct;
+      segEl.textContent = seg.label + " — " + seg.count + " month" + (seg.count === 1 ? "" : "s");
+      timeline.appendChild(segEl);
+    });
+    resultArea.appendChild(timeline);
+
+    if (result.showLoans) {
+      resultArea.appendChild(buildGoalsPhaseBlock({
+        cls: "g-phase-loan",
+        title: "✓ Goal " + result.loanGn + " — All loans paid off",
+        date: result.loanPhaseEnd,
+        sub: result.loanMonthCount + " month" + (result.loanMonthCount === 1 ? "" : "s"),
+        stats: [
+          { val: fmt$(result.totalLoanInterest), lbl: "Total interest paid" },
+          { val: fmt$(result.totalLoanPayments), lbl: "Total payments made" }
+        ]
+      }));
+    }
+
+    if (result.showEmerg) {
+      resultArea.appendChild(buildGoalsPhaseBlock({
+        cls: "g-phase-emerg",
+        title: "✓ Goal " + result.emergGn + " — " + fmt$(result.emergGoal) + " emergency fund reached",
+        date: result.emergPhaseEnd,
+        sub: result.emergMonthCount + " month" + (result.emergMonthCount === 1 ? "" : "s") + " of saving" + (result.showLoans ? " after loan payoff" : ""),
+        stats: [
+          { val: fmt$(result.emergReachedBal), lbl: "Balance when goal hit" },
+          { val: fmt$(result.emergInterest), lbl: "HYSA interest earned" },
+          { val: (result.apy ? result.apy.toFixed(2) + "%" : "—") + " APY", lbl: "Daily compounding" }
+        ]
+      }));
+    }
+
+    if (result.showHouse && result.houseGoal > 0) {
+      const hitIt = !!result.houseGoalDate;
+      const stats = [
+        { val: fmt$(hitIt ? result.houseGoalBal : result.houseFinalBal), lbl: "Balance when goal hit" },
+        { val: fmt$(result.houseInterest), lbl: "HYSA interest earned" }
+      ];
+      if (result.showEmerg && result.emergExcess > 0) stats.push({ val: fmt$(result.emergExcess), lbl: "Excess from E-Fund" });
+      stats.push({ val: fmt$(result.emergInterest + result.houseInterest), lbl: "Total HYSA interest" });
+      resultArea.appendChild(buildGoalsPhaseBlock({
+        cls: "g-phase-house",
+        title: "⌂ Goal " + result.houseGn + " — " + fmt$(result.houseGoal) + " down payment" + (hitIt ? " reached" : " (not yet reached)"),
+        date: hitIt ? result.houseGoalDate : "—",
+        sub: hitIt
+          ? (result.houseGoalMonthCount + " month" + (result.houseGoalMonthCount === 1 ? "" : "s") + " of saving" + (result.showEmerg ? " after emergency fund" : result.showLoans ? " after loan payoff" : ""))
+          : "Target not reached within your planned contributions",
+        stats: stats
+      }));
+    } else if (result.showHouse) {
+      const g3bal = result.houseFinalBal > 0 ? result.houseFinalBal : 0;
+      const g3date = result.houseFinalDate || (result.showEmerg ? result.emergPhaseEnd : result.loanPhaseEnd);
+      const stats = [];
+      if (result.showEmerg && result.emergExcess > 0) stats.push({ val: fmt$(result.emergExcess), lbl: "Excess from E-Fund" });
+      stats.push({ val: fmt$(result.houseInterest), lbl: "HYSA interest earned" });
+      stats.push({ val: fmt$(result.emergInterest + result.houseInterest), lbl: "Total HYSA interest" });
+      resultArea.appendChild(buildGoalsPhaseBlock({
+        cls: "g-phase-house",
+        title: "⌂ Goal " + result.houseGn + " — House Down Payment",
+        date: fmt$(g3bal),
+        sub: "HYSA balance as of " + g3date + " · " + result.houseMonthCount + " month" + (result.houseMonthCount === 1 ? "" : "s") + " of saving",
+        stats: stats
+      }));
+    }
+  }
+
   function renderHousing() {
     const h = state.housing;
     const out = computeHousing();
@@ -1554,6 +2173,7 @@
   }
 
   function renderAll() {
+    renderGoals();
     renderHousing();
     renderSurplus();
     renderPayoff();
