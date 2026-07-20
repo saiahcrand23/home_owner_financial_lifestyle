@@ -295,9 +295,10 @@
           <label for="g-houseEnabled">Include a house down payment goal</label>
         </div>
         <div id="g-house-wrap" class="field">
-          <label>Savings target ($) <span style="font-weight:400;color:var(--text-dim)">(optional)</span></label>
+          <label>Savings target ($) &mdash; auto-filled from Total cash to close on the Home Buying tab</label>
           <input type="number" id="g-houseGoal" step="100" min="0">
-          <div class="sub">Leave blank to just track accumulated savings through your last contribution &mdash; a target shows when you reach it.</div>
+          <div class="sub">Calculated: <span id="g-houseGoalCalculated"></span> &middot; <button class="btn small" id="btn-reset-houseGoal" type="button">Use calculated value</button></div>
+          <div class="sub">Leave blank to just track accumulated savings through your last contribution instead of a target.</div>
         </div>
       </div>
 
@@ -737,6 +738,7 @@
       hysaEnabled: false,
       emergGoal: 0,
       houseGoal: null,
+      houseGoalOverrideActive: false,
       apy: 0,
       loanId: 0,
       contribId: 0,
@@ -959,7 +961,10 @@
     if (g.emergEnabled && emergGoal <= 0) {
       return { error: "Enter an emergency fund target, or disable the Emergency Fund goal." };
     }
-    const houseGoal = g.houseEnabled ? (parseFloat(g.houseGoal) || 0) : 0;
+    const effectiveHouseGoal = g.houseGoalOverrideActive && g.houseGoal !== null && g.houseGoal !== ""
+      ? Number(g.houseGoal)
+      : computeHousing().totalCashToClose;
+    const houseGoal = g.houseEnabled ? (parseFloat(effectiveHouseGoal) || 0) : 0;
     const apy = g.hysaEnabled ? (parseFloat(g.apy) || 0) : 0;
 
     let simStart = null;
@@ -1397,7 +1402,18 @@
     bindCheckbox("g-houseEnabled", function () { return state.goals.houseEnabled; }, function (v) { state.goals.houseEnabled = v; });
     bindCheckbox("g-hysaEnabled", function () { return state.goals.hysaEnabled; }, function (v) { state.goals.hysaEnabled = v; });
     bindNumber("g-emergGoal", function () { return state.goals.emergGoal; }, function (v) { state.goals.emergGoal = v; });
-    bindNumber("g-houseGoal", function () { return state.goals.houseGoal; }, function (v) { state.goals.houseGoal = v; });
+    document.getElementById("g-houseGoal").addEventListener("input", function (e) {
+      state.goals.houseGoalOverrideActive = true;
+      state.goals.houseGoal = e.target.value === "" ? 0 : Number(e.target.value);
+      saveState();
+      renderAll();
+    });
+    document.getElementById("btn-reset-houseGoal").addEventListener("click", function () {
+      state.goals.houseGoalOverrideActive = false;
+      state.goals.houseGoal = null;
+      saveState();
+      renderAll();
+    });
     bindNumber("g-apy", function () { return state.goals.apy; }, function (v) { state.goals.apy = v; });
 
     document.getElementById("g-add-loan").addEventListener("click", function () {
@@ -1522,6 +1538,11 @@
     document.getElementById("g-emerg-wrap").classList.toggle("on", g.emergEnabled);
     document.getElementById("g-house-wrap").classList.toggle("on", g.houseEnabled);
     document.getElementById("g-hysa-wrap").classList.toggle("on", g.hysaEnabled);
+
+    const cashToClose = computeHousing().totalCashToClose;
+    document.getElementById("g-houseGoalCalculated").textContent = fmt$(cashToClose);
+    document.getElementById("g-houseGoal").value = g.houseGoalOverrideActive ? g.houseGoal : Math.round(cashToClose);
+
     renderGoalsLoanList();
     renderGoalsContribList();
   }
