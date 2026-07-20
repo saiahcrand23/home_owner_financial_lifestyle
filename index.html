@@ -144,9 +144,10 @@
     font-size: 0.88rem;
   }
   .stat:last-child { border-bottom: none; }
-  .stat .val { font-weight: 600; }
+  .stat .val { font-weight: 600; text-align: right; }
   .stat.total { font-size: 1rem; padding-top: 10px; }
   .stat.total .val { color: var(--accent); }
+  .val-sub { display: block; font-weight: 400; font-size: 0.74rem; color: var(--text-dim); margin-top: 2px; }
   .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.76rem; font-weight: 600; }
   .badge.good { background: rgba(26,127,55,0.15); color: var(--good); }
   .badge.bad { background: rgba(207,34,46,0.15); color: var(--bad); }
@@ -550,6 +551,11 @@
           <label>Return rate (nominal, annual %)</label>
           <input type="number" id="r-returnRatePct" step="0.25">
         </div>
+        <div class="field">
+          <label>Inflation rate (annual %)</label>
+          <input type="number" id="r-inflationRatePct" step="0.25">
+          <div class="sub">Used to show projected figures in today's purchasing power, alongside the nominal (future-dollar) amount.</div>
+        </div>
         <h3>Employer 401k match</h3>
         <div class="field-row">
           <div class="field">
@@ -570,10 +576,10 @@
         <div class="stat"><span>Employer match (monthly)</span><span class="val" id="out-r-employerMatch"></span></div>
         <div class="stat"><span>Total monthly contribution</span><span class="val" id="out-r-totalContribution"></span></div>
         <div class="stat"><span>Years until retirement</span><span class="val" id="out-r-years"></span></div>
-        <div class="stat total"><span>Projected balance at retirement</span><span class="val" id="out-r-projected"></span></div>
+        <div class="stat total"><span>Projected balance at retirement</span><span class="val"><span id="out-r-projected"></span><span class="val-sub" id="out-r-projected-real"></span></span></div>
         <h3>Contributed vs. earned</h3>
-        <div class="stat"><span>Total contributed (starting balance + contributions)</span><span class="val" id="out-r-contributed"></span></div>
-        <div class="stat"><span>Total earned (growth)</span><span class="val" id="out-r-earned"></span></div>
+        <div class="stat"><span>Total contributed (starting balance + contributions)</span><span class="val"><span id="out-r-contributed"></span><span class="val-sub" id="out-r-contributed-real"></span></span></div>
+        <div class="stat"><span>Total earned (growth)</span><span class="val"><span id="out-r-earned"></span><span class="val-sub" id="out-r-earned-real"></span></span></div>
       </div>
 
       <div class="card">
@@ -682,6 +688,7 @@
       startingBalance: 10000,
       retirementAge: 65,
       returnRatePct: 7,
+      inflationRatePct: 3,
       employerMatchRatePct: 50,
       employerMatchCapPct: 2,
       contributionOverrides: {}
@@ -987,10 +994,21 @@
     const totalContributed = last ? last.contributed : r.startingBalance;
     const totalEarned = projectedBalance - totalContributed;
 
+    // Today's-purchasing-power equivalents: deflate the nominal (future-dollar)
+    // totals by the years-to-retirement at the inflation rate. Same deflator
+    // applied to all three keeps the balance = contributed + earned identity
+    // intact in real terms too.
+    const years = base.months / 12;
+    const deflator = Math.pow(1 + r.inflationRatePct / 100, years);
+    const realProjectedBalance = projectedBalance / deflator;
+    const realTotalContributed = totalContributed / deflator;
+    const realTotalEarned = totalEarned / deflator;
+
     return {
       monthlyContribution: base.retirementDollarMonthly, employerMatchMonthly: base.employerMatchMonthly,
       totalMonthlyContribution: base.totalMonthlyContribution, months: base.months,
-      projectedBalance: projectedBalance, totalContributed: totalContributed, totalEarned: totalEarned
+      projectedBalance: projectedBalance, totalContributed: totalContributed, totalEarned: totalEarned,
+      realProjectedBalance: realProjectedBalance, realTotalContributed: realTotalContributed, realTotalEarned: realTotalEarned
     };
   }
 
@@ -1113,6 +1131,7 @@
     bindNumber("r-retirementAge", function () { return state.retirement.retirementAge; }, function (v) { state.retirement.retirementAge = v; });
     bindNumber("r-startingBalance", function () { return state.retirement.startingBalance; }, function (v) { state.retirement.startingBalance = v; });
     bindNumber("r-returnRatePct", function () { return state.retirement.returnRatePct; }, function (v) { state.retirement.returnRatePct = v; });
+    bindNumber("r-inflationRatePct", function () { return state.retirement.inflationRatePct; }, function (v) { state.retirement.inflationRatePct = v; });
     bindNumber("r-employerMatchRatePct", function () { return state.retirement.employerMatchRatePct; }, function (v) { state.retirement.employerMatchRatePct = v; });
     bindNumber("r-employerMatchCapPct", function () { return state.retirement.employerMatchCapPct; }, function (v) { state.retirement.employerMatchCapPct = v; });
 
@@ -1286,8 +1305,11 @@
     document.getElementById("out-r-totalContribution").textContent = fmt$(out.totalMonthlyContribution);
     document.getElementById("out-r-years").textContent = (out.months / 12).toFixed(1);
     document.getElementById("out-r-projected").textContent = fmt$(out.projectedBalance);
+    document.getElementById("out-r-projected-real").textContent = fmt$(out.realProjectedBalance) + " in today's dollars";
     document.getElementById("out-r-contributed").textContent = fmt$(out.totalContributed);
+    document.getElementById("out-r-contributed-real").textContent = fmt$(out.realTotalContributed) + " in today's dollars";
     document.getElementById("out-r-earned").textContent = fmt$(out.totalEarned);
+    document.getElementById("out-r-earned-real").textContent = fmt$(out.realTotalEarned) + " in today's dollars";
     renderRetirementContributionRows();
     renderRetirementChart(computeRetirementTimeline());
   }
