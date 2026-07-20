@@ -576,6 +576,26 @@
         <div class="stat"><span>Total earned (growth)</span><span class="val" id="out-r-earned"></span></div>
       </div>
 
+      <div class="card">
+        <h2>Contribution changes by age</h2>
+        <p class="hint">Default: no changes &mdash; your calculated contribution (above) stays flat every year. Add a row to set a new monthly contribution starting at a given age; it replaces the calculated contribution + employer match from that age forward, until the next row.</p>
+        <table>
+          <thead><tr><th>Age</th><th>Monthly contribution</th><th></th></tr></thead>
+          <tbody id="r-contrib-rows"></tbody>
+        </table>
+        <div class="addrow">
+          <div class="field">
+            <label>Age</label>
+            <select id="r-contrib-add-age"></select>
+          </div>
+          <div class="field">
+            <label>Monthly contribution ($)</label>
+            <input type="number" id="r-contrib-add-amount" step="50" value="0">
+          </div>
+          <button class="btn primary" id="r-contrib-add-btn" type="button">Add row</button>
+        </div>
+      </div>
+
       <div class="card full-width">
         <h2>Balance over time</h2>
         <p class="hint">Projected balance, total contributed, and total earned (growth) from age <span id="r-chart-startAge"></span> to <span id="r-chart-endAge"></span>.</p>
@@ -663,7 +683,8 @@
       retirementAge: 65,
       returnRatePct: 7,
       employerMatchRatePct: 50,
-      employerMatchCapPct: 2
+      employerMatchCapPct: 2,
+      contributionOverrides: {}
     }
   };
 
@@ -898,47 +919,53 @@
     };
   }
 
-  function computeRetirement() {
+  // The calculated contribution (retirement $ from surplus + employer match) —
+  // this is the flat baseline used for every year, unless a contribution
+  // change row overrides it from a given age onward.
+  function computeRetirementBase() {
     const r = state.retirement;
     const surplus = computeSurplus();
     const retirementDollarMonthly = surplus.retirementDollar;
     const matchablePct = Math.min(state.surplus.retirementPct, r.employerMatchCapPct);
     const employerMatchMonthly = surplus.grossMonthlyCombined * (matchablePct / 100) * (r.employerMatchRatePct / 100);
-    const monthlyContribution = retirementDollarMonthly + employerMatchMonthly;
+    const totalMonthlyContribution = retirementDollarMonthly + employerMatchMonthly;
     const months = Math.max((r.retirementAge - r.currentAge) * 12, 0);
-    const monthlyReturn = r.returnRatePct / 100 / 12;
-
-    let futureStarting, futureContrib;
-    if (monthlyReturn === 0) {
-      futureStarting = r.startingBalance;
-      futureContrib = monthlyContribution * months;
-    } else {
-      futureStarting = r.startingBalance * Math.pow(1 + monthlyReturn, months);
-      futureContrib = monthlyContribution * ((Math.pow(1 + monthlyReturn, months) - 1) / monthlyReturn);
-    }
-    const projectedBalance = futureStarting + futureContrib;
-    const totalContributed = r.startingBalance + monthlyContribution * months;
-    const totalEarned = projectedBalance - totalContributed;
-
     return {
-      monthlyContribution: retirementDollarMonthly, employerMatchMonthly: employerMatchMonthly,
-      totalMonthlyContribution: monthlyContribution, months: months,
-      projectedBalance: projectedBalance, totalContributed: totalContributed, totalEarned: totalEarned
+      retirementDollarMonthly: retirementDollarMonthly, employerMatchMonthly: employerMatchMonthly,
+      totalMonthlyContribution: totalMonthlyContribution, months: months
     };
+  }
+
+  // Effective monthly contribution at a given age: the override that took
+  // effect most recently at or before this age, else the flat baseline.
+  function contributionForAge(baseMonthly, overrides, age) {
+    let effective = baseMonthly;
+    let bestAge = -Infinity;
+    Object.keys(overrides || {}).forEach(function (key) {
+      const a = Number(key);
+      if (a <= age && a > bestAge) {
+        bestAge = a;
+        effective = Number(overrides[key]);
+      }
+    });
+    return effective;
   }
 
   function computeRetirementTimeline() {
     const r = state.retirement;
-    const ret = computeRetirement();
+    const base = computeRetirementBase();
+    const overrides = r.contributionOverrides || {};
     const monthlyReturn = r.returnRatePct / 100 / 12;
-    const months = ret.months;
+    const months = base.months;
 
     let balance = r.startingBalance;
     let contributed = r.startingBalance;
     const points = [{ age: r.currentAge, balance: balance, contributed: contributed, earned: 0 }];
     for (let m = 1; m <= months; m++) {
-      balance = balance * (1 + monthlyReturn) + ret.totalMonthlyContribution;
-      contributed += ret.totalMonthlyContribution;
+      const age = r.currentAge + Math.floor((m - 1) / 12);
+      const contribution = contributionForAge(base.totalMonthlyContribution, overrides, age);
+      balance = balance * (1 + monthlyReturn) + contribution;
+      contributed += contribution;
       if (m % 12 === 0 || m === months) {
         points.push({
           age: r.currentAge + m / 12,
@@ -949,6 +976,22 @@
       }
     }
     return points;
+  }
+
+  function computeRetirement() {
+    const r = state.retirement;
+    const base = computeRetirementBase();
+    const timeline = computeRetirementTimeline();
+    const last = timeline[timeline.length - 1];
+    const projectedBalance = last ? last.balance : r.startingBalance;
+    const totalContributed = last ? last.contributed : r.startingBalance;
+    const totalEarned = projectedBalance - totalContributed;
+
+    return {
+      monthlyContribution: base.retirementDollarMonthly, employerMatchMonthly: base.employerMatchMonthly,
+      totalMonthlyContribution: base.totalMonthlyContribution, months: base.months,
+      projectedBalance: projectedBalance, totalContributed: totalContributed, totalEarned: totalEarned
+    };
   }
 
   // ---------------------------------------------------------------------
@@ -1079,6 +1122,16 @@
       if (!year) return;
       state.payoff.extraByYear[year] = (Number(state.payoff.extraByYear[year]) || 0) + amount;
       document.getElementById("po-add-amount").value = 0;
+      saveState();
+      renderAll();
+    });
+
+    document.getElementById("r-contrib-add-btn").addEventListener("click", function () {
+      const age = Number(document.getElementById("r-contrib-add-age").value);
+      const amount = Number(document.getElementById("r-contrib-add-amount").value) || 0;
+      if (!age) return;
+      state.retirement.contributionOverrides[age] = amount;
+      document.getElementById("r-contrib-add-amount").value = 0;
       saveState();
       renderAll();
     });
@@ -1235,7 +1288,50 @@
     document.getElementById("out-r-projected").textContent = fmt$(out.projectedBalance);
     document.getElementById("out-r-contributed").textContent = fmt$(out.totalContributed);
     document.getElementById("out-r-earned").textContent = fmt$(out.totalEarned);
+    renderRetirementContributionRows();
     renderRetirementChart(computeRetirementTimeline());
+  }
+
+  function renderRetirementContributionRows() {
+    const r = state.retirement;
+    const maxAge = r.retirementAge - 1;
+
+    const ageSelect = document.getElementById("r-contrib-add-age");
+    const currentVal = ageSelect.value;
+    ageSelect.innerHTML = "";
+    for (let a = r.currentAge; a <= maxAge; a++) {
+      const opt = document.createElement("option");
+      opt.value = a;
+      opt.textContent = "Age " + a;
+      ageSelect.appendChild(opt);
+    }
+    if (currentVal && Number(currentVal) >= r.currentAge && Number(currentVal) <= maxAge) ageSelect.value = currentVal;
+
+    const rowsBody = document.getElementById("r-contrib-rows");
+    rowsBody.innerHTML = "";
+    const ages = Object.keys(r.contributionOverrides).map(Number).sort(function (a, b) { return a - b; });
+    if (ages.length === 0) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = '<td colspan="3" style="text-align:center;color:var(--text-dim)">No contribution changes added</td>';
+      rowsBody.appendChild(tr);
+    }
+    ages.forEach(function (age) {
+      const tr = document.createElement("tr");
+      const amt = r.contributionOverrides[age];
+      tr.innerHTML = "<td>Age " + age + "</td><td>" + fmt$(amt) + " / mo</td><td></td>";
+      const removeTd = tr.lastElementChild;
+      const btn = document.createElement("button");
+      btn.className = "btn small danger";
+      btn.textContent = "Remove";
+      btn.type = "button";
+      btn.addEventListener("click", function () {
+        delete state.retirement.contributionOverrides[age];
+        saveState();
+        renderAll();
+      });
+      removeTd.appendChild(btn);
+      rowsBody.appendChild(tr);
+    });
   }
 
   function renderRetirementChart(points) {
