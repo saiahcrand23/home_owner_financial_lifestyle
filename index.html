@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Home &amp; Lifestyle Finances</title>
+<title>Financial Goal Projections</title>
 <style>
   :root {
     --bg: #f4f5f7;
@@ -236,7 +236,7 @@
 <body>
 
 <header>
-  <h1>Home &amp; Lifestyle Finances</h1>
+  <h1>Financial Goal Projections</h1>
   <div class="header-actions">
     <button class="btn" id="btn-export">Export data</button>
     <button class="btn" id="btn-import">Import data</button>
@@ -2226,7 +2226,7 @@
       const a = document.createElement("a");
       const date = new Date().toISOString().slice(0, 10);
       a.href = url;
-      a.download = "home-lifestyle-finances-" + date + ".json";
+      a.download = "financial-goal-projections-" + date + ".json";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
