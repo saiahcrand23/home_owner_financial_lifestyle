@@ -246,7 +246,7 @@
 </header>
 
 <nav class="tabs">
-  <button data-tab="goals" class="active">Financial Goals</button>
+  <button data-tab="goals" class="active">Savings Goals</button>
   <button data-tab="housing">Home Buying</button>
   <button data-tab="surplus">Surplus</button>
   <button data-tab="payoff">House Payoff</button>
@@ -279,7 +279,7 @@
       </div>
 
       <div class="card">
-        <h2>Savings goals</h2>
+        <h2>Savings targets</h2>
         <h3>Emergency fund</h3>
         <div class="checkbox-row">
           <input type="checkbox" id="g-emergEnabled">
@@ -884,7 +884,7 @@
   }
 
   // ---------------------------------------------------------------------
-  // Financial Goals calculation engine
+  // Savings Goals calculation engine
   // ---------------------------------------------------------------------
   function goalsDaysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
   function goalsHysaInt(bal, apy, y, m) {
