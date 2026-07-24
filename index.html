@@ -512,15 +512,9 @@
 
       <div class="card">
         <h2>Budget categories</h2>
-        <div class="field">
-          <label>Needs (monthly $)</label>
-          <input type="number" id="s-needs" step="50">
-        </div>
-        <div class="field">
-          <label>Wants (monthly $)</label>
-          <input type="number" id="s-wants" step="50">
-        </div>
-        <div class="field">
+        <div id="s-category-list"></div>
+        <button class="btn" id="s-add-category" type="button">+ Add category</button>
+        <div class="field" style="margin-top:16px">
           <label>Housing (monthly $) &mdash; auto-filled from Home Buying tab</label>
           <input type="number" id="s-housingOverride" step="10">
           <div class="sub">Calculated: <span id="s-housingCalculated"></span> &middot; <button class="btn small" id="btn-reset-housing" type="button">Use calculated value</button></div>
@@ -537,10 +531,10 @@
         <div class="stat"><span>Annual</span><span class="val" id="out-surplusAnnual"></span></div>
         <div class="stat"><span>Quarterly</span><span class="val" id="out-surplusQuarterly"></span></div>
         <div class="stat total"><span>Monthly</span><span class="val" id="out-surplusMonthly"></span></div>
-        <div class="note">Annual surplus = (net regular pay &times; 12) + (net bonus pay &times; 4) &minus; (needs + wants + housing + retirement) &times; 12 &minus; tithe.</div>
+        <div class="note">Annual surplus = (net regular pay &times; 12) + (net bonus pay &times; 4) &minus; (budget categories + housing + retirement) &times; 12 &minus; tithe.</div>
 
         <h3>Where it goes (annual)</h3>
-        <div class="stat"><span>Needs + wants + housing + retirement</span><span class="val" id="out-deductionsAnnual"></span></div>
+        <div class="stat"><span>Budget categories + housing + retirement</span><span class="val" id="out-deductionsAnnual"></span></div>
         <div class="stat"><span>Tithe</span><span class="val" id="out-titheAnnual"></span></div>
         <div class="stat"><span>Taxes</span><span class="val" id="out-taxAnnual"></span></div>
       </div>
@@ -786,8 +780,11 @@
       taxRate: 22,
       hsaMonthly: 0,
       healthInsuranceMonthly: 0,
-      needs: 1800,
-      wants: 500,
+      categoryId: 2,
+      categories: [
+        { id: 1, name: "Needs", amount: 1800 },
+        { id: 2, name: "Wants", amount: 500 }
+      ],
       housingOverride: null,
       housingOverrideActive: false,
       retirementPct: 8,
@@ -829,6 +826,20 @@
     return target;
   }
 
+  // Pre-dates the move to custom budget categories: old saves/exports have
+  // surplus.needs/wants but no surplus.categories, so rebuild the list from
+  // those instead of silently reverting to the Needs/Wants defaults.
+  function migrateLegacyCategories(target, source) {
+    if (source && source.surplus && !source.surplus.categories &&
+      (source.surplus.needs !== undefined || source.surplus.wants !== undefined)) {
+      target.surplus.categories = [
+        { id: 1, name: "Needs", amount: source.surplus.needs || 0 },
+        { id: 2, name: "Wants", amount: source.surplus.wants || 0 }
+      ];
+      target.surplus.categoryId = 2;
+    }
+  }
+
   function loadState() {
     let saved = null;
     try {
@@ -836,6 +847,7 @@
       if (raw) saved = JSON.parse(raw);
     } catch (e) { /* ignore corrupt storage */ }
     state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), saved || {});
+    migrateLegacyCategories(state, saved);
   }
 
   function saveState() {
@@ -1209,8 +1221,10 @@
     const grossMonthlyCombined = s.grossRegularMonthly + s.grossBonusQuarterly / 3;
     const retirementDollar = grossMonthlyCombined * (s.retirementPct / 100);
 
+    const categoriesTotal = s.categories.reduce(function (sum, c) { return sum + (Number(c.amount) || 0); }, 0);
+
     const annualPretithe = netRegularPretithe * 12 + netBonusPretithe * 4;
-    const annualDeductions = (s.needs + s.wants + housingCost + retirementDollar) * 12;
+    const annualDeductions = (categoriesTotal + housingCost + retirementDollar) * 12;
     const titheAnnual = (s.titheRegular ? s.grossRegularMonthly * 12 * 0.10 : 0) +
       (s.titheBonus ? s.grossBonusQuarterly * 4 * 0.10 : 0);
     const taxAnnual = taxRegularMonthly * 12 + taxBonusQuarterly * 4;
@@ -1230,6 +1244,7 @@
 
     return {
       housingCost: housingCost, retirementDollar: retirementDollar, grossMonthlyCombined: grossMonthlyCombined,
+      categoriesTotal: categoriesTotal,
       annualSurplus: annualSurplus, quarterlySurplus: quarterlySurplus, monthlySurplus: monthlySurplus,
       vacationAnnual: vacationAnnual, payoffAnnual: payoffAnnual,
       annualDeductions: annualDeductions, titheAnnual: titheAnnual, taxAnnual: taxAnnual
@@ -1469,9 +1484,14 @@
     bindNumber("s-taxRate", function () { return state.surplus.taxRate; }, function (v) { state.surplus.taxRate = v; });
     bindNumber("s-hsaMonthly", function () { return state.surplus.hsaMonthly; }, function (v) { state.surplus.hsaMonthly = v; });
     bindNumber("s-healthInsuranceMonthly", function () { return state.surplus.healthInsuranceMonthly; }, function (v) { state.surplus.healthInsuranceMonthly = v; });
-    bindNumber("s-needs", function () { return state.surplus.needs; }, function (v) { state.surplus.needs = v; });
-    bindNumber("s-wants", function () { return state.surplus.wants; }, function (v) { state.surplus.wants = v; });
     bindNumber("s-retirementPct", function () { return state.surplus.retirementPct; }, function (v) { state.surplus.retirementPct = v; });
+
+    document.getElementById("s-add-category").addEventListener("click", function () {
+      state.surplus.categoryId += 1;
+      state.surplus.categories.push({ id: state.surplus.categoryId, name: "New category", amount: 0 });
+      saveState();
+      renderAll();
+    });
 
     document.getElementById("s-housingOverride").addEventListener("input", function (e) {
       state.surplus.housingOverrideActive = true;
@@ -1849,9 +1869,70 @@
     });
   }
 
+  function renderSurplusCategoryList() {
+    const categories = state.surplus.categories;
+    const listEl = document.getElementById("s-category-list");
+    listEl.innerHTML = "";
+    if (!categories.length) {
+      listEl.innerHTML = '<p class="empty-msg">No budget categories added yet</p>';
+      return;
+    }
+    categories.forEach(function (c) {
+      const row = document.createElement("div");
+      row.className = "field-row";
+      row.style.alignItems = "flex-end";
+      row.innerHTML =
+        '<div class="field"><label>Name</label><input type="text" class="s-cat-name"></div>' +
+        '<div class="field"><label>Monthly amount ($)</label><input type="number" step="50" min="0" class="s-cat-amt"></div>';
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn small danger";
+      removeBtn.type = "button";
+      removeBtn.textContent = "Remove";
+      removeBtn.style.marginBottom = "16px";
+      row.appendChild(removeBtn);
+      removeBtn.addEventListener("click", function () {
+        state.surplus.categories = state.surplus.categories.filter(function (x) { return x.id !== c.id; });
+        saveState();
+        renderAll();
+      });
+
+      const nameInput = row.querySelector(".s-cat-name");
+      const amtInput = row.querySelector(".s-cat-amt");
+      nameInput.value = c.name;
+      amtInput.value = c.amount;
+      nameInput.addEventListener("input", function (e) { c.name = e.target.value; saveState(); });
+      amtInput.addEventListener("input", function (e) {
+        c.amount = e.target.value;
+        saveState();
+        renderSurplusTotalsOnly();
+        renderPayoff();
+        renderRetirement();
+      });
+
+      listEl.appendChild(row);
+    });
+  }
+
+  function renderSurplusTotalsOnly() {
+    const out = computeSurplus();
+    document.getElementById("out-surplusAnnual").textContent = fmt$(out.annualSurplus);
+    document.getElementById("out-surplusQuarterly").textContent = fmt$(out.quarterlySurplus);
+    document.getElementById("out-surplusMonthly").textContent = fmt$(out.monthlySurplus);
+    document.getElementById("out-deductionsAnnual").textContent = fmt$(out.annualDeductions);
+    document.getElementById("out-titheAnnual").textContent = fmt$(out.titheAnnual);
+    document.getElementById("out-taxAnnual").textContent = fmt$(out.taxAnnual);
+    document.getElementById("out-vacationAnnual").textContent = fmt$(out.vacationAnnual);
+    document.getElementById("out-payoffAnnual").textContent = fmt$(out.payoffAnnual);
+    document.getElementById("s-payoffPct").value = state.surplus.payoffPct;
+    document.getElementById("s-payoffDollar").value = Math.round(out.payoffAnnual);
+  }
+
   function renderSurplus() {
     const s = state.surplus;
     const out = computeSurplus();
+
+    renderSurplusCategoryList();
 
     document.getElementById("s-housingCalculated").textContent = fmt$(computeHousing().totalMonthly);
     document.getElementById("s-housingOverride").value = s.housingOverrideActive ? s.housingOverride : Math.round(computeHousing().totalMonthly);
@@ -2245,6 +2326,7 @@
         try {
           const imported = JSON.parse(reader.result);
           state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), imported);
+          migrateLegacyCategories(state, imported);
           saveState();
           syncStaticFields();
           renderAll();
