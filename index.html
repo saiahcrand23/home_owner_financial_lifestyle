@@ -231,6 +231,31 @@
   .g-phase-loan { background: color-mix(in srgb, var(--series-balance) 8%, var(--panel)); }
   .g-phase-emerg { background: color-mix(in srgb, var(--series-contributed) 8%, var(--panel)); }
   .g-phase-house { background: color-mix(in srgb, var(--series-earned) 8%, var(--panel)); }
+
+  .print-heading { display: none; }
+
+  @media print {
+    @page { margin: 0.6in; }
+    :root {
+      --bg: #ffffff; --panel: #ffffff; --border: #ccc;
+      --text: #000; --text-dim: #444; --input-bg: #ffffff;
+    }
+    body { background: #fff; }
+    header { position: static; box-shadow: none; }
+    nav.tabs, .radio-toggle, .addrow, .btn { display: none !important; }
+    main { max-width: none; padding: 0; }
+    .card { break-inside: avoid; box-shadow: none; }
+    .tabpanel { display: block !important; }
+    .tabpanel + .tabpanel { break-before: page; page-break-before: always; }
+    .print-heading {
+      display: block; font-size: 1.3rem; font-weight: 700;
+      margin: 0 0 14px; padding-bottom: 8px; border-bottom: 2px solid #000;
+    }
+    input[type=number], input[type=text], input[type=date], input[type=month], select {
+      border: none !important; background: transparent !important; padding: 2px 0 !important;
+      -webkit-appearance: none; appearance: none; color: #000 !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -238,6 +263,7 @@
 <header>
   <h1>Financial Goal Projections</h1>
   <div class="header-actions">
+    <button class="btn" id="btn-print">Print / Save PDF</button>
     <button class="btn" id="btn-export">Export data</button>
     <button class="btn" id="btn-import">Import data</button>
     <button class="btn danger" id="btn-reset">Reset all</button>
@@ -257,6 +283,7 @@
 
   <!-- ===================== FINANCIAL GOALS ===================== -->
   <section class="tabpanel active" id="tab-goals">
+    <h2 class="print-heading">Savings Goals</h2>
     <div class="grid">
 
       <div class="card full-width">
@@ -327,6 +354,7 @@
 
   <!-- ===================== HOME BUYING ===================== -->
   <section class="tabpanel" id="tab-housing">
+    <h2 class="print-heading">Home Buying</h2>
     <div class="grid">
 
       <div class="card">
@@ -474,6 +502,7 @@
 
   <!-- ===================== SURPLUS ===================== -->
   <section class="tabpanel" id="tab-surplus">
+    <h2 class="print-heading">Surplus</h2>
     <div class="grid">
 
       <div class="card">
@@ -577,6 +606,7 @@
 
   <!-- ===================== HOUSE PAYOFF ===================== -->
   <section class="tabpanel" id="tab-payoff">
+    <h2 class="print-heading">House Payoff</h2>
     <div class="grid">
 
       <div class="card">
@@ -625,6 +655,7 @@
 
   <!-- ===================== RETIREMENT ===================== -->
   <section class="tabpanel" id="tab-retirement">
+    <h2 class="print-heading">Retirement</h2>
     <div class="grid">
 
       <div class="card">
@@ -2301,6 +2332,17 @@
   // Export / Import / Reset
   // ---------------------------------------------------------------------
   function wireDataControls() {
+    document.getElementById("btn-print").addEventListener("click", function () {
+      const detailsEls = document.querySelectorAll("details");
+      const wasOpen = Array.prototype.map.call(detailsEls, function (d) { return d.open; });
+      detailsEls.forEach(function (d) { d.open = true; });
+      window.print();
+      window.onafterprint = function () {
+        detailsEls.forEach(function (d, i) { d.open = wasOpen[i]; });
+        window.onafterprint = null;
+      };
+    });
+
     document.getElementById("btn-export").addEventListener("click", function () {
       const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
