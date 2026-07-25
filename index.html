@@ -553,7 +553,7 @@
           <div class="note">Annual surplus = (net regular pay &times; 12) + (net bonus pay &times; 4) &minus; (budget categories + housing + retirement) &times; 12 &minus; tithe.</div>
 
           <div class="stat total"><span>Total monthly budget</span><span class="val" id="out-totalMonthlyBudget"></span></div>
-          <div class="note">Budget categories + housing + retirement + tithe, monthly.</div>
+          <div class="note">Budget categories + housing + retirement + tithe on regular pay. Excludes tithe on the quarterly bonus, which isn't a monthly cost.</div>
 
           <h3>Where it goes (annual)</h3>
           <div class="stat"><span>Budget categories + housing + retirement</span><span class="val" id="out-deductionsAnnual"></span></div>
@@ -580,7 +580,7 @@
 
       <div class="card full-width">
         <h2>Allocate the surplus</h2>
-        <p class="hint">Split between discretionary (vacation/fun) and house payoff.</p>
+        <p class="hint">Split between discretionary (vacation/fun), savings, and house payoff.</p>
         <div class="radio-toggle">
           <button data-split="percent" id="split-percent">Percentage</button>
           <button data-split="dollar" id="split-dollar">Dollar amount / year</button>
@@ -589,6 +589,10 @@
           <div class="field">
             <label>Discretionary (vacation/fun) %</label>
             <input type="number" id="s-vacationPct" step="5" min="0" max="100">
+          </div>
+          <div class="field">
+            <label>Savings %</label>
+            <input type="number" id="s-savingsPct" step="5" min="0" max="100">
           </div>
           <div class="field">
             <label>House payoff %</label>
@@ -602,12 +606,17 @@
             <input type="number" id="s-vacationDollar" step="500">
           </div>
           <div class="field">
+            <label>Savings $ / year</label>
+            <input type="number" id="s-savingsDollar" step="500">
+          </div>
+          <div class="field">
             <label>House payoff $ / year</label>
             <input type="number" id="s-payoffDollar" step="500" disabled>
-            <div class="sub">Auto-set to the remainder (total surplus minus discretionary)</div>
+            <div class="sub">Auto-set to the remainder (total surplus minus discretionary and savings)</div>
           </div>
         </div>
         <div class="stat"><span>Discretionary / year</span><span class="val" id="out-vacationAnnual"></span></div>
+        <div class="stat"><span>Savings / year</span><span class="val" id="out-savingsAnnual"></span></div>
         <div class="stat"><span>House payoff / year</span><span class="val" id="out-payoffAnnual"></span></div>
       </div>
 
@@ -841,8 +850,10 @@
       retirementPct: 7,
       splitMode: "dollar",
       vacationPct: 50,
+      savingsPct: 0,
       payoffPct: 50,
-      vacationDollar: 1500
+      vacationDollar: 1500,
+      savingsDollar: 0
     },
     payoff: {
       extraByYear: { "2": 2000, "3": 2500, "4": 2200 }
@@ -1276,7 +1287,8 @@
 
     const annualPretithe = netRegularPretithe * 12 + netBonusPretithe * 4;
     const annualDeductions = (categoriesTotal + housingCost + retirementDollar) * 12;
-    const titheAnnual = (s.titheRegular ? s.grossRegularMonthly * 12 * 0.10 : 0) +
+    const titheRegularMonthly = s.titheRegular ? s.grossRegularMonthly * 0.10 : 0;
+    const titheAnnual = titheRegularMonthly * 12 +
       (s.titheBonus ? s.grossBonusQuarterly * 4 * 0.10 : 0);
     const taxAnnual = taxRegularMonthly * 12 + taxBonusQuarterly * 4;
 
@@ -1284,22 +1296,24 @@
     const quarterlySurplus = annualSurplus / 4;
     const monthlySurplus = annualSurplus / 12;
 
-    let vacationAnnual, payoffAnnual;
+    let vacationAnnual, savingsAnnual, payoffAnnual;
     if (s.splitMode === "percent") {
       vacationAnnual = annualSurplus * (s.vacationPct / 100);
+      savingsAnnual = annualSurplus * (s.savingsPct / 100);
       payoffAnnual = annualSurplus * (s.payoffPct / 100);
     } else {
       vacationAnnual = s.vacationDollar;
-      payoffAnnual = annualSurplus - s.vacationDollar;
+      savingsAnnual = s.savingsDollar;
+      payoffAnnual = annualSurplus - s.vacationDollar - s.savingsDollar;
     }
 
-    const totalMonthlyBudget = categoriesTotal + housingCost + retirementDollar + titheAnnual / 12;
+    const totalMonthlyBudget = categoriesTotal + housingCost + retirementDollar + titheRegularMonthly;
 
     return {
       housingCost: housingCost, retirementDollar: retirementDollar, grossMonthlyCombined: grossMonthlyCombined,
       categoriesTotal: categoriesTotal, totalMonthlyBudget: totalMonthlyBudget,
       annualSurplus: annualSurplus, quarterlySurplus: quarterlySurplus, monthlySurplus: monthlySurplus,
-      vacationAnnual: vacationAnnual, payoffAnnual: payoffAnnual,
+      vacationAnnual: vacationAnnual, savingsAnnual: savingsAnnual, payoffAnnual: payoffAnnual,
       annualDeductions: annualDeductions, titheAnnual: titheAnnual, taxAnnual: taxAnnual
     };
   }
@@ -1565,11 +1579,19 @@
     document.getElementById("s-vacationPct").addEventListener("input", function (e) {
       const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
       state.surplus.vacationPct = v;
-      state.surplus.payoffPct = 100 - v;
+      state.surplus.payoffPct = 100 - v - state.surplus.savingsPct;
+      saveState();
+      renderAll();
+    });
+    document.getElementById("s-savingsPct").addEventListener("input", function (e) {
+      const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+      state.surplus.savingsPct = v;
+      state.surplus.payoffPct = 100 - state.surplus.vacationPct - v;
       saveState();
       renderAll();
     });
     bindNumber("s-vacationDollar", function () { return state.surplus.vacationDollar; }, function (v) { state.surplus.vacationDollar = v; });
+    bindNumber("s-savingsDollar", function () { return state.surplus.savingsDollar; }, function (v) { state.surplus.savingsDollar = v; });
 
     bindNumber("r-currentAge", function () { return state.retirement.currentAge; }, function (v) { state.retirement.currentAge = v; });
     bindNumber("r-retirementAge", function () { return state.retirement.retirementAge; }, function (v) { state.retirement.retirementAge = v; });
@@ -1977,6 +1999,7 @@
     document.getElementById("out-titheAnnual").textContent = fmt$(out.titheAnnual);
     document.getElementById("out-taxAnnual").textContent = fmt$(out.taxAnnual);
     document.getElementById("out-vacationAnnual").textContent = fmt$(out.vacationAnnual);
+    document.getElementById("out-savingsAnnual").textContent = fmt$(out.savingsAnnual);
     document.getElementById("out-payoffAnnual").textContent = fmt$(out.payoffAnnual);
     document.getElementById("s-payoffPct").value = state.surplus.payoffPct;
     document.getElementById("s-payoffDollar").value = Math.round(out.payoffAnnual);
@@ -2007,11 +2030,14 @@
     document.getElementById("split-percent-fields").style.display = s.splitMode === "percent" ? "flex" : "none";
     document.getElementById("split-dollar-fields").style.display = s.splitMode === "dollar" ? "flex" : "none";
     document.getElementById("s-vacationPct").value = s.vacationPct;
+    document.getElementById("s-savingsPct").value = s.savingsPct;
     document.getElementById("s-payoffPct").value = s.payoffPct;
     document.getElementById("s-vacationDollar").value = s.vacationDollar;
+    document.getElementById("s-savingsDollar").value = s.savingsDollar;
     document.getElementById("s-payoffDollar").value = Math.round(out.payoffAnnual);
 
     document.getElementById("out-vacationAnnual").textContent = fmt$(out.vacationAnnual);
+    document.getElementById("out-savingsAnnual").textContent = fmt$(out.savingsAnnual);
     document.getElementById("out-payoffAnnual").textContent = fmt$(out.payoffAnnual);
   }
 
