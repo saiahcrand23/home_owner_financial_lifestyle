@@ -105,6 +105,11 @@
     grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
     gap: 16px;
   }
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
   .card {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -505,37 +510,55 @@
     <h2 class="print-heading">Surplus</h2>
     <div class="grid">
 
-      <div class="card">
-        <h2>Pay</h2>
-        <div class="field">
-          <label>Gross regular pay (monthly $)</label>
-          <input type="number" id="s-grossRegularMonthly" step="100">
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="s-titheRegular">
-          <label for="s-titheRegular">Tithe 10% of this gross (subtracted last, after tax/HSA/health insurance/retirement)</label>
-        </div>
-        <div class="field">
-          <label>Gross bonus pay (quarterly $)</label>
-          <input type="number" id="s-grossBonusQuarterly" step="100">
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="s-titheBonus">
-          <label for="s-titheBonus">Tithe 10% of this gross (subtracted last; bonus has no HSA/health insurance deduction)</label>
-        </div>
-        <div class="field">
-          <label>Effective tax rate (%)</label>
-          <input type="number" id="s-taxRate" step="0.5">
-        </div>
-        <div class="field-row">
+      <div class="stack">
+        <div class="card">
+          <h2>Pay</h2>
           <div class="field">
-            <label>Monthly HSA contribution ($)</label>
-            <input type="number" id="s-hsaMonthly" step="10">
+            <label>Gross regular pay (monthly $)</label>
+            <input type="number" id="s-grossRegularMonthly" step="100">
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="s-titheRegular">
+            <label for="s-titheRegular">Tithe 10% of this gross (subtracted last, after tax/HSA/health insurance/retirement)</label>
           </div>
           <div class="field">
-            <label>Monthly health insurance ($)</label>
-            <input type="number" id="s-healthInsuranceMonthly" step="10">
+            <label>Gross bonus pay (quarterly $)</label>
+            <input type="number" id="s-grossBonusQuarterly" step="100">
           </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="s-titheBonus">
+            <label for="s-titheBonus">Tithe 10% of this gross (subtracted last; bonus has no HSA/health insurance deduction)</label>
+          </div>
+          <div class="field">
+            <label>Effective tax rate (%)</label>
+            <input type="number" id="s-taxRate" step="0.5">
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Monthly HSA contribution ($)</label>
+              <input type="number" id="s-hsaMonthly" step="10">
+            </div>
+            <div class="field">
+              <label>Monthly health insurance ($)</label>
+              <input type="number" id="s-healthInsuranceMonthly" step="10">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Total surplus</h2>
+          <div class="stat"><span>Annual</span><span class="val" id="out-surplusAnnual"></span></div>
+          <div class="stat"><span>Quarterly</span><span class="val" id="out-surplusQuarterly"></span></div>
+          <div class="stat total"><span>Monthly</span><span class="val" id="out-surplusMonthly"></span></div>
+          <div class="note">Annual surplus = (net regular pay &times; 12) + (net bonus pay &times; 4) &minus; (budget categories + housing + retirement) &times; 12 &minus; tithe.</div>
+
+          <div class="stat total"><span>Total monthly budget</span><span class="val" id="out-totalMonthlyBudget"></span></div>
+          <div class="note">Budget categories + housing + retirement + tithe, monthly.</div>
+
+          <h3>Where it goes (annual)</h3>
+          <div class="stat"><span>Budget categories + housing + retirement</span><span class="val" id="out-deductionsAnnual"></span></div>
+          <div class="stat"><span>Tithe</span><span class="val" id="out-titheAnnual"></span></div>
+          <div class="stat"><span>Taxes</span><span class="val" id="out-taxAnnual"></span></div>
         </div>
       </div>
 
@@ -553,22 +576,6 @@
           <input type="number" id="s-retirementPct" step="0.5">
           <div class="derived" id="s-retirementDollar"></div>
         </div>
-      </div>
-
-      <div class="card">
-        <h2>Total surplus</h2>
-        <div class="stat"><span>Annual</span><span class="val" id="out-surplusAnnual"></span></div>
-        <div class="stat"><span>Quarterly</span><span class="val" id="out-surplusQuarterly"></span></div>
-        <div class="stat total"><span>Monthly</span><span class="val" id="out-surplusMonthly"></span></div>
-        <div class="note">Annual surplus = (net regular pay &times; 12) + (net bonus pay &times; 4) &minus; (budget categories + housing + retirement) &times; 12 &minus; tithe.</div>
-
-        <div class="stat total"><span>Total monthly budget</span><span class="val" id="out-totalMonthlyBudget"></span></div>
-        <div class="note">Budget categories + housing + retirement + tithe, monthly.</div>
-
-        <h3>Where it goes (annual)</h3>
-        <div class="stat"><span>Budget categories + housing + retirement</span><span class="val" id="out-deductionsAnnual"></span></div>
-        <div class="stat"><span>Tithe</span><span class="val" id="out-titheAnnual"></span></div>
-        <div class="stat"><span>Taxes</span><span class="val" id="out-taxAnnual"></span></div>
       </div>
 
       <div class="card full-width">
