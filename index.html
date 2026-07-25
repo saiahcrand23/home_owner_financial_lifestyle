@@ -562,6 +562,9 @@
         <div class="stat total"><span>Monthly</span><span class="val" id="out-surplusMonthly"></span></div>
         <div class="note">Annual surplus = (net regular pay &times; 12) + (net bonus pay &times; 4) &minus; (budget categories + housing + retirement) &times; 12 &minus; tithe.</div>
 
+        <div class="stat total"><span>Total monthly budget</span><span class="val" id="out-totalMonthlyBudget"></span></div>
+        <div class="note">Budget categories + housing + retirement + tithe, monthly.</div>
+
         <h3>Where it goes (annual)</h3>
         <div class="stat"><span>Budget categories + housing + retirement</span><span class="val" id="out-deductionsAnnual"></span></div>
         <div class="stat"><span>Tithe</span><span class="val" id="out-titheAnnual"></span></div>
@@ -1283,9 +1286,11 @@
       payoffAnnual = annualSurplus - s.vacationDollar;
     }
 
+    const totalMonthlyBudget = categoriesTotal + housingCost + retirementDollar + titheAnnual / 12;
+
     return {
       housingCost: housingCost, retirementDollar: retirementDollar, grossMonthlyCombined: grossMonthlyCombined,
-      categoriesTotal: categoriesTotal,
+      categoriesTotal: categoriesTotal, totalMonthlyBudget: totalMonthlyBudget,
       annualSurplus: annualSurplus, quarterlySurplus: quarterlySurplus, monthlySurplus: monthlySurplus,
       vacationAnnual: vacationAnnual, payoffAnnual: payoffAnnual,
       annualDeductions: annualDeductions, titheAnnual: titheAnnual, taxAnnual: taxAnnual
@@ -1960,6 +1965,7 @@
     document.getElementById("out-surplusAnnual").textContent = fmt$(out.annualSurplus);
     document.getElementById("out-surplusQuarterly").textContent = fmt$(out.quarterlySurplus);
     document.getElementById("out-surplusMonthly").textContent = fmt$(out.monthlySurplus);
+    document.getElementById("out-totalMonthlyBudget").textContent = fmt$(out.totalMonthlyBudget);
     document.getElementById("out-deductionsAnnual").textContent = fmt$(out.annualDeductions);
     document.getElementById("out-titheAnnual").textContent = fmt$(out.titheAnnual);
     document.getElementById("out-taxAnnual").textContent = fmt$(out.taxAnnual);
@@ -1983,6 +1989,7 @@
     document.getElementById("out-surplusAnnual").textContent = fmt$(out.annualSurplus);
     document.getElementById("out-surplusQuarterly").textContent = fmt$(out.quarterlySurplus);
     document.getElementById("out-surplusMonthly").textContent = fmt$(out.monthlySurplus);
+    document.getElementById("out-totalMonthlyBudget").textContent = fmt$(out.totalMonthlyBudget);
 
     document.getElementById("out-deductionsAnnual").textContent = fmt$(out.annualDeductions);
     document.getElementById("out-titheAnnual").textContent = fmt$(out.titheAnnual);
