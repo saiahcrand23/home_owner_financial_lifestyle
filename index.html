@@ -758,83 +758,93 @@
   const DEFAULTS = {
     goals: {
       loansEnabled: true,
-      emergEnabled: false,
-      houseEnabled: false,
-      hysaEnabled: false,
-      emergGoal: 0,
+      emergEnabled: true,
+      houseEnabled: true,
+      hysaEnabled: true,
+      emergGoal: 15000,
       houseGoal: null,
       houseGoalOverrideActive: false,
-      apy: 0,
-      loanId: 0,
-      contribId: 0,
-      loans: [],
-      contribs: []
+      apy: 4.00,
+      loanId: 1,
+      contribId: 7,
+      loans: [
+        { id: 1, bal: "37717", rate: "6.39", minPay: "393.00" }
+      ],
+      contribs: [
+        { id: 1, freq: "oneoff", amt: "3050", start: "", end: "", day: "2026-07-19" },
+        { id: 2, freq: "monthly", amt: "300", start: "2026-08", end: "", day: "" },
+        { id: 3, freq: "quarterly", amt: "600", start: "2026-09", end: "", day: "" },
+        { id: 4, freq: "oneoff", amt: "500", start: "", end: "", day: "2027-03-15" },
+        { id: 5, freq: "oneoff", amt: "1500", start: "", end: "", day: "2026-09-20" },
+        { id: 6, freq: "oneoff", amt: "800", start: "", end: "", day: "2026-12-20" },
+        { id: 7, freq: "oneoff", amt: "600", start: "2027-03", end: "", day: "2027-03-20" }
+      ]
     },
     housing: {
-      homePrice: 400000,
-      downPaymentPct: 5,
-      interestRate: 6.5,
+      homePrice: 440600,
+      downPaymentPct: 13,
+      interestRate: 6.6,
       termYears: 30,
-      propertyTaxRate: 0.51,
-      homeInsuranceAnnual: 1800,
+      propertyTaxRate: 1.02,
+      homeInsuranceAnnual: 2300,
       hoaMonthly: 0,
-      pmiRate: 0.75,
-      maintenanceRate: 1.0,
+      pmiRate: 0.6,
+      maintenanceRate: 1,
       closing: {
-        originationPct: 1.0,
+        originationPct: 1,
         pointsPct: 0,
-        appraisalFee: 550,
-        inspectionFee: 450,
-        titleFee: 1200,
-        attorneyFee: 1000,
+        appraisalFee: 500,
+        inspectionFee: 400,
+        titleFee: 1000,
+        attorneyFee: 700,
         recordingFee: 125,
         transferTaxPct: 0.5,
         prepaidTaxMonths: 2,
-        prepaidInsurance: 1800,
+        prepaidInsurance: 2300,
         prepaidInterestDays: 15,
         otherClosing: 500
       },
       upfront: {
-        moving: 2000,
-        repairs: 0,
-        furniture: 0,
-        warranty: 600,
-        utilityDeposits: 200,
+        moving: 1000,
+        repairs: 500,
+        furniture: 1500,
+        warranty: 500,
+        utilityDeposits: 150,
         other: 0
       }
     },
     surplus: {
-      grossRegularMonthly: 6000,
-      titheRegular: true,
-      grossBonusQuarterly: 2000,
-      titheBonus: true,
-      taxRate: 22,
+      grossRegularMonthly: 7083,
+      titheRegular: false,
+      grossBonusQuarterly: 500,
+      titheBonus: false,
+      taxRate: 20.0,
       hsaMonthly: 0,
-      healthInsuranceMonthly: 0,
+      healthInsuranceMonthly: 180,
       categoryId: 2,
       categories: [
-        { id: 1, name: "Needs", amount: 1800 },
-        { id: 2, name: "Wants", amount: 500 }
+        { id: 1, name: "Needs", amount: 2400 },
+        { id: 2, name: "Wants", amount: 400 }
       ],
       housingOverride: null,
       housingOverrideActive: false,
-      retirementPct: 8,
-      splitMode: "percent",
+      retirementPct: 7,
+      splitMode: "dollar",
       vacationPct: 50,
       payoffPct: 50,
-      vacationDollar: 5000
+      vacationDollar: 1500
     },
     payoff: {
-      extraByYear: {}
+      extraByYear: { "2": 2000, "3": 2500, "4": 2200 }
     },
     retirement: {
-      currentAge: 30,
-      startingBalance: 10000,
+      currentAge: 38,
+      startingBalance: 35000,
       retirementAge: 65,
       returnRatePct: 7,
       inflationRatePct: 3,
       employerMatchRatePct: 50,
-      employerMatchCapPct: 2,
+      employerMatchCapPct: 3,
       contributionOverrides: {}
     }
   };
