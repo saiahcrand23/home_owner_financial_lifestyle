@@ -215,6 +215,9 @@
   #g-loans-wrap, #g-emerg-wrap, #g-house-wrap, #g-hysa-wrap { display: none; }
   #g-loans-wrap.on, #g-emerg-wrap.on, #g-house-wrap.on, #g-hysa-wrap.on { display: block; }
 
+  .kids-acct-fields { display: none; }
+  .kids-acct-fields.on { display: block; }
+
   .g-warning { background: var(--accent-dim); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; font-size: 0.85rem; color: var(--text); margin-bottom: 12px; }
   .g-timeline { display: flex; align-items: stretch; margin: 4px 0 16px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); min-height: 42px; }
   .g-tlseg { display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; padding: 8px 4px; text-align: center; min-width: 2px; color: var(--text); }
@@ -282,6 +285,7 @@
   <button data-tab="surplus">Surplus</button>
   <button data-tab="payoff">House Payoff</button>
   <button data-tab="retirement">Retirement</button>
+  <button data-tab="kids">Kids' Future</button>
 </nav>
 
 <main>
@@ -774,6 +778,64 @@
     </div>
   </section>
 
+  <!-- ===================== KIDS' FUTURE ===================== -->
+  <section class="tabpanel" id="tab-kids">
+    <h2 class="print-heading">Kids' Future</h2>
+    <div class="grid">
+
+      <div class="card">
+        <h2>Kids' future savings</h2>
+        <div class="stat total"><span>Total annual contribution</span><span class="val" id="out-k-annualPool"></span></div>
+        <div class="note">Pulled from the Kids' future allocation on the Surplus tab.</div>
+        <div class="stat" id="out-k-annualPoolLatestRow" style="display:none">
+          <span>New total starting <span id="out-k-annualPoolLatestYear"></span></span>
+          <span class="val" id="out-k-annualPoolLatest"></span>
+        </div>
+        <div class="field" style="margin-top:14px">
+          <label>Plan start date</label>
+          <input type="date" id="k-startDate">
+          <div class="sub">Contributions are modeled starting this month. Defaults to today.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Increase contributions by year</h2>
+        <p class="hint">Optional: set a new total annual amount starting in a given year, replacing the figure above from that year forward until the next row.</p>
+        <table>
+          <thead><tr><th>Year</th><th>New annual total</th><th></th></tr></thead>
+          <tbody id="k-year-rows"></tbody>
+        </table>
+        <div class="addrow">
+          <div class="field">
+            <label>Year</label>
+            <select id="k-year-add-year"></select>
+          </div>
+          <div class="field">
+            <label>New annual total ($)</label>
+            <input type="number" id="k-year-add-amount" step="500" value="0">
+          </div>
+          <button class="btn primary" id="k-year-add-btn" type="button">Add row</button>
+        </div>
+      </div>
+
+      <div class="card full-width">
+        <h2>Children</h2>
+        <p class="hint">Add each child, then choose a 529 plan and/or brokerage account for their savings. Allocations are a % of the total annual contribution above.</p>
+        <div class="checkbox-row">
+          <input type="checkbox" id="k-easy529">
+          <label for="k-easy529">Balance all 529 plans to an equal projected ending balance</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="k-easyBrokerage">
+          <label for="k-easyBrokerage">Balance all brokerage accounts to an equal projected ending balance</label>
+        </div>
+        <div id="k-child-list"></div>
+        <button class="btn" id="k-add-child" type="button">+ Add child</button>
+      </div>
+
+    </div>
+  </section>
+
 </main>
 
 <script>
@@ -878,6 +940,16 @@
       employerMatchRatePct: 50,
       employerMatchCapPct: 3,
       contributionOverrides: {}
+    },
+    kids: {
+      startDate: "",
+      childId: 0,
+      children: [],
+      increaseByYear: {},
+      easy529: false,
+      easyBrokerage: false,
+      easy529TotalPct: 0,
+      easyBrokerageTotalPct: 0
     }
   };
 
@@ -921,6 +993,7 @@
     } catch (e) { /* ignore corrupt storage */ }
     state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), saved || {});
     migrateLegacyCategories(state, saved);
+    if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
   }
 
   function saveState() {
@@ -1444,6 +1517,143 @@
   }
 
   // ---------------------------------------------------------------------
+  // Kids' Future calculation engine
+  // ---------------------------------------------------------------------
+  // Months from `fromMonthDate` (already month-truncated) until the child born
+  // on `dob` turns `targetAge`, measured on the child's birth month.
+  function kidsMonthsToAge(dob, targetAge, fromMonthDate) {
+    const targetMonthDate = new Date(dob.getFullYear() + targetAge, dob.getMonth(), 1);
+    return goalsMonthKey(targetMonthDate) - goalsMonthKey(fromMonthDate);
+  }
+
+  function kidsStartMonthDate() {
+    const d = goalsParseYMD(state.kids.startDate) || new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+
+  // The total annual kids'-future pool for a given calendar year: the most
+  // recent override at or before that year, else today's Surplus-tab figure.
+  function kidsPoolForYear(year, baseAnnualPool, overridesSorted) {
+    let amt = baseAnnualPool;
+    overridesSorted.forEach(function (pair) {
+      if (pair[0] <= year) amt = pair[1];
+    });
+    return amt;
+  }
+
+  // Simulates one child's one account (529 or brokerage) from the plan start
+  // month until the child reaches targetAge, contributing pct% of that
+  // month's total pool, monthly-compounded at returnRatePct. Mirrors the
+  // retirement engine's loop/point-sampling shape so both can share a chart.
+  function kidsAccountProjection(dob, targetAge, returnRatePct, pct, startMonthDate, baseAnnualPool, overridesSorted) {
+    const dobMonthDate = new Date(dob.getFullYear(), dob.getMonth(), 1);
+    const startAge = (goalsMonthKey(startMonthDate) - goalsMonthKey(dobMonthDate)) / 12;
+    const months = kidsMonthsToAge(dob, targetAge, startMonthDate);
+
+    if (months <= 0) {
+      return { balance: 0, contributed: 0, months: 0, points: [{ age: startAge, balance: 0, contributed: 0, earned: 0 }] };
+    }
+
+    const monthlyReturn = returnRatePct / 100 / 12;
+    let balance = 0, contributed = 0;
+    let cur = new Date(startMonthDate);
+    const points = [{ age: startAge, balance: 0, contributed: 0, earned: 0 }];
+    for (let m = 1; m <= months; m++) {
+      const annualPool = kidsPoolForYear(cur.getFullYear(), baseAnnualPool, overridesSorted);
+      const contribution = (annualPool / 12) * (pct / 100);
+      balance = balance * (1 + monthlyReturn) + contribution;
+      contributed += contribution;
+      if (m % 12 === 0 || m === months) {
+        points.push({ age: startAge + m / 12, balance: balance, contributed: contributed, earned: balance - contributed });
+      }
+      cur = goalsAddMonths(cur, 1);
+    }
+    return { balance: balance, contributed: contributed, months: months, points: points };
+  }
+
+  // Equal annual withdrawal (annuity-due: withdrawn at the start of each of
+  // the `n` years, remaining balance keeps earning returnRatePct) that fully
+  // depletes `fvAtStart` by the end of year n.
+  function kids529WithdrawalAmount(fvAtStart, returnRatePct, n) {
+    n = n || 4;
+    const g = Math.pow(1 + returnRatePct / 100 / 12, 12);
+    if (Math.abs(g - 1) < 1e-9) return fvAtStart / n;
+    return fvAtStart * Math.pow(g, n - 1) * (g - 1) / (Math.pow(g, n) - 1);
+  }
+
+  // Recomputes allocPct for every eligible child's account of `accountKey`
+  // ("plan529" or "brokerage") so all end at an equal projected balance,
+  // holding the total % committed (captured when the easy toggle was
+  // switched on) fixed. FV is linear in pct (starting balance is always 0),
+  // so a single pct=100 simulation per child gives the scaling factor needed
+  // to solve for the shared target balance directly — no iteration needed.
+  function kidsApplyEasyAllocation(accountKey, targetAgeKey, totalPctField) {
+    const k = state.kids;
+    const startMonthDate = kidsStartMonthDate();
+    const baseAnnualPool = computeSurplus().kidsFutureAnnual;
+    const overridesSorted = Object.keys(k.increaseByYear).map(Number).sort(function (a, b) { return a - b; })
+      .map(function (y) { return [y, Number(k.increaseByYear[y])]; });
+
+    const eligible = [];
+    k.children.forEach(function (child) {
+      const acct = child[accountKey];
+      const dob = goalsParseYMD(child.dob);
+      if (!acct || !acct.enabled || !dob) return;
+      const proj = kidsAccountProjection(dob, acct[targetAgeKey], acct.returnRatePct, 100, startMonthDate, baseAnnualPool, overridesSorted);
+      if (proj.months > 0 && proj.balance > 0) eligible.push({ child: child, acct: acct, fvUnit: proj.balance });
+    });
+    if (!eligible.length) return;
+
+    const totalPct = k[totalPctField];
+    const denom = eligible.reduce(function (sum, e) { return sum + 100 / e.fvUnit; }, 0);
+    const targetBalance = totalPct / denom;
+    eligible.forEach(function (e) {
+      e.acct.allocPct = Math.round((100 * targetBalance / e.fvUnit) * 100) / 100;
+    });
+  }
+
+  function computeKids() {
+    const k = state.kids;
+    const startMonthDate = kidsStartMonthDate();
+    const baseAnnualPool = computeSurplus().kidsFutureAnnual;
+    const overridesSorted = Object.keys(k.increaseByYear).map(Number).sort(function (a, b) { return a - b; })
+      .map(function (y) { return [y, Number(k.increaseByYear[y])]; });
+
+    if (k.easy529) kidsApplyEasyAllocation("plan529", "collegeAge", "easy529TotalPct");
+    if (k.easyBrokerage) kidsApplyEasyAllocation("brokerage", "withdrawAge", "easyBrokerageTotalPct");
+
+    function accountOutput(child, accountKey) {
+      const acct = child[accountKey];
+      if (!acct || !acct.enabled) return null;
+      const dob = goalsParseYMD(child.dob);
+      const targetAge = accountKey === "plan529" ? acct.collegeAge : acct.withdrawAge;
+      const dollarAmountToday = baseAnnualPool * (acct.allocPct / 100);
+      if (!dob) return { noDob: true, allocPct: acct.allocPct, dollarAmountToday: dollarAmountToday };
+
+      const proj = kidsAccountProjection(dob, targetAge, acct.returnRatePct, acct.allocPct, startMonthDate, baseAnnualPool, overridesSorted);
+      const out = {
+        allocPct: acct.allocPct, dollarAmountToday: dollarAmountToday,
+        balance: proj.balance, contributed: proj.contributed, earned: proj.balance - proj.contributed,
+        months: proj.months, points: proj.points, targetAge: targetAge
+      };
+      if (accountKey === "plan529") {
+        out.withdrawalPerYear = kids529WithdrawalAmount(proj.balance, acct.returnRatePct, 4);
+      }
+      return out;
+    }
+
+    const children = k.children.map(function (child) {
+      return {
+        id: child.id, name: child.name, dob: child.dob,
+        plan529: accountOutput(child, "plan529"),
+        brokerage: accountOutput(child, "brokerage")
+      };
+    });
+
+    return { baseAnnualPool: baseAnnualPool, startMonthDate: startMonthDate, children: children };
+  }
+
+  // ---------------------------------------------------------------------
   // Binding helpers
   // ---------------------------------------------------------------------
   // Getters/setters always dereference through the live `state` global (never
@@ -1639,6 +1849,51 @@
       if (!age) return;
       state.retirement.contributionOverrides[age] = amount;
       document.getElementById("r-contrib-add-amount").value = 0;
+      saveState();
+      renderAll();
+    });
+
+    document.getElementById("k-startDate").addEventListener("input", function (e) {
+      state.kids.startDate = e.target.value;
+      saveState();
+      renderAll();
+    });
+
+    document.getElementById("k-year-add-btn").addEventListener("click", function () {
+      const year = Number(document.getElementById("k-year-add-year").value);
+      const amount = Number(document.getElementById("k-year-add-amount").value) || 0;
+      if (!year) return;
+      state.kids.increaseByYear[year] = amount;
+      document.getElementById("k-year-add-amount").value = 0;
+      saveState();
+      renderAll();
+    });
+
+    document.getElementById("k-add-child").addEventListener("click", function () {
+      state.kids.childId += 1;
+      state.kids.children.push({
+        id: state.kids.childId, name: "", dob: "",
+        plan529: { enabled: false, allocPct: 0, returnRatePct: 6, collegeAge: 18 },
+        brokerage: { enabled: false, allocPct: 0, returnRatePct: 7, withdrawAge: 18 }
+      });
+      saveState();
+      renderAll();
+    });
+
+    function kidsSumAllocPct(accountKey) {
+      return state.kids.children.reduce(function (sum, c) {
+        return sum + (c[accountKey].enabled ? (Number(c[accountKey].allocPct) || 0) : 0);
+      }, 0);
+    }
+    document.getElementById("k-easy529").addEventListener("change", function (e) {
+      if (e.target.checked) state.kids.easy529TotalPct = kidsSumAllocPct("plan529");
+      state.kids.easy529 = e.target.checked;
+      saveState();
+      renderAll();
+    });
+    document.getElementById("k-easyBrokerage").addEventListener("change", function (e) {
+      if (e.target.checked) state.kids.easyBrokerageTotalPct = kidsSumAllocPct("brokerage");
+      state.kids.easyBrokerage = e.target.checked;
       saveState();
       renderAll();
     });
@@ -2185,43 +2440,65 @@
   }
 
   function renderRetirementChart(points) {
-    const wrap = document.getElementById("r-chart-wrap");
-    const legend = document.getElementById("r-chart-legend");
-    const tableBody = document.getElementById("r-chart-table-body");
     const r = state.retirement;
-
     document.getElementById("r-chart-startAge").textContent = r.currentAge;
     document.getElementById("r-chart-endAge").textContent = r.retirementAge;
 
-    const seriesConfig = [
-      { key: "balance", label: "Balance", varName: "--series-balance" },
-      { key: "contributed", label: "Contributed", varName: "--series-contributed" },
-      { key: "earned", label: "Earned", varName: "--series-earned" }
-    ];
-
-    legend.innerHTML = "";
-    seriesConfig.forEach(function (s) {
-      const item = document.createElement("div");
-      item.className = "item";
-      const sw = document.createElement("span");
-      sw.className = "swatch";
-      sw.style.background = "var(" + s.varName + ")";
-      const label = document.createElement("span");
-      label.textContent = s.label;
-      item.appendChild(sw);
-      item.appendChild(label);
-      legend.appendChild(item);
+    renderTimelineChart({
+      wrapId: "r-chart-wrap", legendId: "r-chart-legend", tableBodyId: "r-chart-table-body",
+      points: points,
+      seriesConfig: [
+        { key: "balance", label: "Balance", varName: "--series-balance" },
+        { key: "contributed", label: "Contributed", varName: "--series-contributed" },
+        { key: "earned", label: "Earned", varName: "--series-earned" }
+      ],
+      tableColumns: [
+        function (p) { return Math.round(p.age); },
+        function (p) { return fmt$(p.balance); },
+        function (p) { return fmt$(p.contributed); },
+        function (p) { return fmt$(p.earned); }
+      ],
+      emptyMessage: "Set a retirement age after your current age to see the projection."
     });
+  }
 
-    tableBody.innerHTML = "";
-    points.forEach(function (p) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = "<td>" + Math.round(p.age) + "</td><td>" + fmt$(p.balance) + "</td><td>" + fmt$(p.contributed) + "</td><td>" + fmt$(p.earned) + "</td>";
-      tableBody.appendChild(tr);
-    });
+  // Generic age-indexed multi-series line chart with hover tooltip, reused by
+  // Retirement and each Kids' Future account projection. `points` is an array
+  // of { age, ...seriesKeys }; `seriesConfig` describes which keys to plot.
+  function renderTimelineChart(opts) {
+    const wrap = document.getElementById(opts.wrapId);
+    const legend = opts.legendId ? document.getElementById(opts.legendId) : null;
+    const tableBody = opts.tableBodyId ? document.getElementById(opts.tableBodyId) : null;
+    const points = opts.points;
+    const seriesConfig = opts.seriesConfig;
+
+    if (legend) {
+      legend.innerHTML = "";
+      seriesConfig.forEach(function (s) {
+        const item = document.createElement("div");
+        item.className = "item";
+        const sw = document.createElement("span");
+        sw.className = "swatch";
+        sw.style.background = "var(" + s.varName + ")";
+        const label = document.createElement("span");
+        label.textContent = s.label;
+        item.appendChild(sw);
+        item.appendChild(label);
+        legend.appendChild(item);
+      });
+    }
+
+    if (tableBody && opts.tableColumns) {
+      tableBody.innerHTML = "";
+      points.forEach(function (p) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = opts.tableColumns.map(function (fn) { return "<td>" + fn(p) + "</td>"; }).join("");
+        tableBody.appendChild(tr);
+      });
+    }
 
     if (points.length < 2) {
-      wrap.innerHTML = '<p class="hint">Set a retirement age after your current age to see the projection.</p>';
+      wrap.innerHTML = '<p class="hint">' + (opts.emptyMessage || "Not enough data to chart.") + '</p>';
       return;
     }
 
@@ -2231,8 +2508,11 @@
     const plotH = H - marginTop - marginBottom;
 
     const minAge = points[0].age, maxAge = points[points.length - 1].age;
-    const maxVal = Math.max.apply(null, points.map(function (p) { return Math.max(p.balance, p.contributed, p.earned); }));
+    const maxVal = Math.max.apply(null, points.map(function (p) {
+      return Math.max.apply(null, seriesConfig.map(function (s) { return p[s.key]; }));
+    }));
     const niceMax = niceCeil(maxVal || 1);
+    const areaKey = seriesConfig[0].key, areaVarName = seriesConfig[0].varName;
 
     function xScale(age) { return marginLeft + (age - minAge) / ((maxAge - minAge) || 1) * plotW; }
     function yScale(val) { return marginTop + plotH - (Math.max(val, 0) / niceMax) * plotH; }
@@ -2258,8 +2538,8 @@
       xSvg += '<text x="' + x.toFixed(1) + '" y="' + (H - marginBottom + 18) + '" class="chart-axis-label" text-anchor="middle">' + Math.round(age) + '</text>';
     });
 
-    const areaPath = pathFor("balance") + " L " + xScale(maxAge).toFixed(1) + "," + yScale(0).toFixed(1) + " L " + xScale(minAge).toFixed(1) + "," + yScale(0).toFixed(1) + " Z";
-    let linesSvg = '<path class="chart-area" d="' + areaPath + '" style="fill:var(--series-balance)"></path>';
+    const areaPath = pathFor(areaKey) + " L " + xScale(maxAge).toFixed(1) + "," + yScale(0).toFixed(1) + " L " + xScale(minAge).toFixed(1) + "," + yScale(0).toFixed(1) + " Z";
+    let linesSvg = '<path class="chart-area" d="' + areaPath + '" style="fill:var(' + areaVarName + ')"></path>';
     seriesConfig.forEach(function (s) {
       linesSvg += '<path class="chart-line" d="' + pathFor(s.key) + '" style="stroke:var(' + s.varName + ')"></path>';
     });
@@ -2381,12 +2661,256 @@
     hitRect.addEventListener("pointerleave", hide);
   }
 
+  function renderKids() {
+    document.getElementById("k-startDate").value = state.kids.startDate;
+    document.getElementById("k-easy529").checked = state.kids.easy529;
+    document.getElementById("k-easyBrokerage").checked = state.kids.easyBrokerage;
+    renderKidsYearRows();
+    renderKidsChildList();
+    renderKidsOutputsOnly();
+  }
+
+  function renderKidsYearRows() {
+    const k = state.kids;
+    const startYear = kidsStartMonthDate().getFullYear();
+    const maxYear = startYear + 30;
+
+    const yearSelect = document.getElementById("k-year-add-year");
+    const currentVal = yearSelect.value;
+    yearSelect.innerHTML = "";
+    for (let y = startYear; y <= maxYear; y++) {
+      const opt = document.createElement("option");
+      opt.value = y;
+      opt.textContent = y;
+      yearSelect.appendChild(opt);
+    }
+    if (currentVal && Number(currentVal) >= startYear && Number(currentVal) <= maxYear) yearSelect.value = currentVal;
+
+    const rowsBody = document.getElementById("k-year-rows");
+    rowsBody.innerHTML = "";
+    const years = Object.keys(k.increaseByYear).map(Number).sort(function (a, b) { return a - b; });
+    if (years.length === 0) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = '<td colspan="3" style="text-align:center;color:var(--text-dim)">No increases added</td>';
+      rowsBody.appendChild(tr);
+    }
+    years.forEach(function (year) {
+      const tr = document.createElement("tr");
+      const amt = k.increaseByYear[year];
+      tr.innerHTML = "<td>" + year + "</td><td>" + fmt$(amt) + " / yr</td><td></td>";
+      const removeTd = tr.lastElementChild;
+      const btn = document.createElement("button");
+      btn.className = "btn small danger";
+      btn.textContent = "Remove";
+      btn.type = "button";
+      btn.addEventListener("click", function () {
+        delete state.kids.increaseByYear[year];
+        saveState();
+        renderAll();
+      });
+      removeTd.appendChild(btn);
+      rowsBody.appendChild(tr);
+    });
+  }
+
+  function kidsOutputStatsHtml(output, isFiveTwoNine) {
+    if (!output) return "";
+    if (output.noDob) {
+      return '<p class="hint">Enter a date of birth to see the projection.</p>';
+    }
+    if (output.months <= 0) {
+      return '<p class="hint">Target age is already reached as of the plan start date.</p>';
+    }
+    let html = ''
+      + '<div class="stat"><span>Years until target age</span><span class="val">' + (output.months / 12).toFixed(1) + '</span></div>'
+      + '<div class="stat total"><span>Projected balance</span><span class="val">' + fmt$(output.balance) + '</span></div>'
+      + '<div class="stat"><span>Contributed</span><span class="val">' + fmt$(output.contributed) + '</span></div>'
+      + '<div class="stat"><span>Earned (growth)</span><span class="val">' + fmt$(output.earned) + '</span></div>';
+    if (isFiveTwoNine) {
+      html += '<div class="stat total"><span>Available each of 4 college years</span><span class="val">' + fmt$(output.withdrawalPerYear) + ' / yr</span></div>';
+    }
+    html += '<div class="chart-wrap kids-mini-chart"></div>';
+    return html;
+  }
+
+  // Field-level edits below only update state + saveState() then refresh via
+  // renderKidsOutputsOnly() (values/stats/charts on already-existing nodes) —
+  // never renderAll() — so rebuilding this list on every keystroke (which
+  // renderKidsChildList() below does) doesn't steal focus mid-type. Only
+  // structural changes (add/remove child or account enable) call renderAll().
+  function renderKidsChildList() {
+    const children = state.kids.children;
+    const listEl = document.getElementById("k-child-list");
+    listEl.innerHTML = "";
+    if (!children.length) {
+      listEl.innerHTML = '<p class="empty-msg">No children added yet</p>';
+      return;
+    }
+    children.forEach(function (child, i) {
+      const card = document.createElement("div");
+      card.className = "subcard";
+      card.innerHTML = ''
+        + '<div class="subcard-header"><span class="title k-title">Child ' + (i + 1) + '</span></div>'
+        + '<div class="field-row">'
+        + '<div class="field"><label>Name</label><input type="text" class="k-c-name"></div>'
+        + '<div class="field"><label>Date of birth</label><input type="date" class="k-c-dob"></div>'
+        + '</div>'
+        + '<div class="subcard">'
+        + '<div class="checkbox-row"><input type="checkbox" class="k-c-529-enabled"><label>529 plan</label></div>'
+        + '<div class="kids-acct-fields k-c-529-fields">'
+        + '<div class="field-row">'
+        + '<div class="field"><label>Allocation (% of total pool)</label><input type="number" step="1" min="0" max="100" class="k-c-529-pct"><div class="derived k-c-529-dollar"></div></div>'
+        + '<div class="field"><label>Rate of return (%)</label><input type="number" step="0.25" class="k-c-529-rate"></div>'
+        + '<div class="field"><label>College/trade school age</label><input type="number" step="1" min="1" class="k-c-529-age"></div>'
+        + '</div>'
+        + '<div class="k-c-529-output"></div>'
+        + '</div>'
+        + '</div>'
+        + '<div class="subcard">'
+        + '<div class="checkbox-row"><input type="checkbox" class="k-c-brok-enabled"><label>Brokerage account</label></div>'
+        + '<div class="kids-acct-fields k-c-brok-fields">'
+        + '<div class="field-row">'
+        + '<div class="field"><label>Allocation (% of total pool)</label><input type="number" step="1" min="0" max="100" class="k-c-brok-pct"><div class="derived k-c-brok-dollar"></div></div>'
+        + '<div class="field"><label>Rate of return (%)</label><input type="number" step="0.25" class="k-c-brok-rate"></div>'
+        + '<div class="field"><label>Withdrawal age</label><input type="number" step="1" min="1" class="k-c-brok-age"></div>'
+        + '</div>'
+        + '<div class="k-c-brok-output"></div>'
+        + '</div>'
+        + '</div>';
+
+      const header = card.querySelector(".subcard-header");
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn small danger";
+      removeBtn.type = "button";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", function () {
+        state.kids.children = state.kids.children.filter(function (x) { return x.id !== child.id; });
+        saveState();
+        renderAll();
+      });
+      header.appendChild(removeBtn);
+
+      const nameInput = card.querySelector(".k-c-name");
+      const dobInput = card.querySelector(".k-c-dob");
+      nameInput.value = child.name || "";
+      dobInput.value = child.dob || "";
+      nameInput.addEventListener("input", function (e) { child.name = e.target.value; saveState(); renderKidsOutputsOnly(); });
+      dobInput.addEventListener("input", function (e) { child.dob = e.target.value; saveState(); renderKidsOutputsOnly(); });
+
+      function wireAccount(prefix, acctKey, ageKey, easyFlagKey) {
+        const enabledEl = card.querySelector("." + prefix + "-enabled");
+        const fieldsEl = card.querySelector("." + prefix + "-fields");
+        const pctEl = card.querySelector("." + prefix + "-pct");
+        const rateEl = card.querySelector("." + prefix + "-rate");
+        const ageEl = card.querySelector("." + prefix + "-age");
+        const acct = child[acctKey];
+
+        enabledEl.checked = acct.enabled;
+        fieldsEl.classList.toggle("on", acct.enabled);
+        pctEl.value = acct.allocPct;
+        pctEl.disabled = state.kids[easyFlagKey];
+        rateEl.value = acct.returnRatePct;
+        ageEl.value = acct[ageKey];
+
+        enabledEl.addEventListener("change", function (e) {
+          acct.enabled = e.target.checked;
+          saveState();
+          renderAll();
+        });
+        pctEl.addEventListener("input", function (e) {
+          acct.allocPct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+          saveState();
+          renderKidsOutputsOnly();
+        });
+        rateEl.addEventListener("input", function (e) {
+          acct.returnRatePct = Number(e.target.value) || 0;
+          saveState();
+          renderKidsOutputsOnly();
+        });
+        ageEl.addEventListener("input", function (e) {
+          acct[ageKey] = Number(e.target.value) || 0;
+          saveState();
+          renderKidsOutputsOnly();
+        });
+      }
+      wireAccount("k-c-529", "plan529", "collegeAge", "easy529");
+      wireAccount("k-c-brok", "brokerage", "withdrawAge", "easyBrokerage");
+
+      listEl.appendChild(card);
+    });
+  }
+
+  // Updates only text/value/chart content on nodes renderKidsChildList()
+  // already built — never rebuilds the list — so it's safe to call on every
+  // keystroke without stealing focus from whichever field is being edited.
+  function renderKidsOutputsOnly() {
+    const k = state.kids;
+    const out = computeKids();
+    document.getElementById("out-k-annualPool").textContent = fmt$(out.baseAnnualPool) + " / yr";
+
+    const latestRow = document.getElementById("out-k-annualPoolLatestRow");
+    const years = Object.keys(k.increaseByYear).map(Number);
+    if (years.length) {
+      const maxYear = Math.max.apply(null, years);
+      document.getElementById("out-k-annualPoolLatestYear").textContent = maxYear;
+      document.getElementById("out-k-annualPoolLatest").textContent = fmt$(Number(k.increaseByYear[maxYear])) + " / yr";
+      latestRow.style.display = "flex";
+    } else {
+      latestRow.style.display = "none";
+    }
+
+    const listEl = document.getElementById("k-child-list");
+    state.kids.children.forEach(function (child, i) {
+      const cardEl = listEl.children[i];
+      if (!cardEl) return;
+      const childOut = out.children[i];
+
+      const titleEl = cardEl.querySelector(".k-title");
+      titleEl.textContent = child.name ? child.name : ("Child " + (i + 1));
+
+      [
+        { prefix: "k-c-529", acctKey: "plan529", isFiveTwoNine: true, easyFlagKey: "easy529" },
+        { prefix: "k-c-brok", acctKey: "brokerage", isFiveTwoNine: false, easyFlagKey: "easyBrokerage" }
+      ].forEach(function (spec) {
+        const acct = child[spec.acctKey];
+        const pctEl = cardEl.querySelector("." + spec.prefix + "-pct");
+        const dollarEl = cardEl.querySelector("." + spec.prefix + "-dollar");
+        const outputEl = cardEl.querySelector("." + spec.prefix + "-output");
+
+        pctEl.value = acct.allocPct;
+        pctEl.disabled = state.kids[spec.easyFlagKey];
+        dollarEl.textContent = fmt$(out.baseAnnualPool * (acct.allocPct / 100)) + " / yr";
+
+        if (!acct.enabled) { outputEl.innerHTML = ""; return; }
+        const acctOut = childOut[spec.acctKey];
+        outputEl.innerHTML = kidsOutputStatsHtml(acctOut, spec.isFiveTwoNine);
+
+        if (acctOut && !acctOut.noDob && acctOut.months > 0 && acctOut.points.length > 1) {
+          const chartWrap = outputEl.querySelector(".kids-mini-chart");
+          const chartId = "k-chart-" + child.id + "-" + spec.acctKey;
+          chartWrap.id = chartId;
+          renderTimelineChart({
+            wrapId: chartId,
+            points: acctOut.points,
+            seriesConfig: [
+              { key: "balance", label: "Balance", varName: "--series-balance" },
+              { key: "contributed", label: "Contributed", varName: "--series-contributed" },
+              { key: "earned", label: "Earned", varName: "--series-earned" }
+            ],
+            emptyMessage: "Not enough time before target age to chart."
+          });
+        }
+      });
+    });
+  }
+
   function renderAll() {
     renderGoals();
     renderHousing();
     renderSurplus();
     renderPayoff();
     renderRetirement();
+    renderKids();
   }
 
   // ---------------------------------------------------------------------
@@ -2445,6 +2969,7 @@
           const imported = JSON.parse(reader.result);
           state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), imported);
           migrateLegacyCategories(state, imported);
+          if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
           saveState();
           syncStaticFields();
           renderAll();
@@ -2459,6 +2984,7 @@
     document.getElementById("btn-reset").addEventListener("click", function () {
       if (!confirm("Reset all inputs to defaults? This clears everything currently saved.")) return;
       state = JSON.parse(JSON.stringify(DEFAULTS));
+      state.kids.startDate = new Date().toISOString().slice(0, 10);
       saveState();
       syncStaticFields();
       renderAll();
