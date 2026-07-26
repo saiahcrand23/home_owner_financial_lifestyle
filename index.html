@@ -580,12 +580,12 @@
 
       <div class="card full-width">
         <h2>Allocate the surplus</h2>
-        <p class="hint">Split between discretionary (vacation/fun), savings, and house payoff.</p>
+        <p class="hint">Split between discretionary (vacation/fun), savings, kids' future, and house payoff.</p>
         <div class="radio-toggle">
           <button data-split="percent" id="split-percent">Percentage</button>
           <button data-split="dollar" id="split-dollar">Dollar amount / year</button>
         </div>
-        <div id="split-percent-fields" class="field-row">
+        <div id="split-percent-fields">
           <div class="field">
             <label>Discretionary (vacation/fun) %</label>
             <input type="number" id="s-vacationPct" step="5" min="0" max="100">
@@ -595,12 +595,16 @@
             <input type="number" id="s-savingsPct" step="5" min="0" max="100">
           </div>
           <div class="field">
+            <label>Kids' future %</label>
+            <input type="number" id="s-kidsFuturePct" step="5" min="0" max="100">
+          </div>
+          <div class="field">
             <label>House payoff %</label>
             <input type="number" id="s-payoffPct" step="5" min="0" max="100" disabled>
             <div class="sub">Auto-set to the remainder</div>
           </div>
         </div>
-        <div id="split-dollar-fields" class="field-row" style="display:none">
+        <div id="split-dollar-fields" style="display:none">
           <div class="field">
             <label>Discretionary (vacation/fun) $ / year</label>
             <input type="number" id="s-vacationDollar" step="500">
@@ -610,13 +614,18 @@
             <input type="number" id="s-savingsDollar" step="500">
           </div>
           <div class="field">
+            <label>Kids' future $ / year</label>
+            <input type="number" id="s-kidsFutureDollar" step="500">
+          </div>
+          <div class="field">
             <label>House payoff $ / year</label>
             <input type="number" id="s-payoffDollar" step="500" disabled>
-            <div class="sub">Auto-set to the remainder (total surplus minus discretionary and savings)</div>
+            <div class="sub">Auto-set to the remainder (total surplus minus discretionary, savings, and kids' future)</div>
           </div>
         </div>
         <div class="stat"><span>Discretionary / year</span><span class="val" id="out-vacationAnnual"></span></div>
         <div class="stat"><span>Savings / year</span><span class="val" id="out-savingsAnnual"></span></div>
+        <div class="stat"><span>Kids' future / year</span><span class="val" id="out-kidsFutureAnnual"></span></div>
         <div class="stat"><span>House payoff / year</span><span class="val" id="out-payoffAnnual"></span></div>
       </div>
 
@@ -851,9 +860,11 @@
       splitMode: "dollar",
       vacationPct: 50,
       savingsPct: 0,
+      kidsFuturePct: 0,
       payoffPct: 50,
       vacationDollar: 1500,
-      savingsDollar: 0
+      savingsDollar: 0,
+      kidsFutureDollar: 0
     },
     payoff: {
       extraByYear: { "2": 2000, "3": 2500, "4": 2200 }
@@ -1296,15 +1307,17 @@
     const quarterlySurplus = annualSurplus / 4;
     const monthlySurplus = annualSurplus / 12;
 
-    let vacationAnnual, savingsAnnual, payoffAnnual;
+    let vacationAnnual, savingsAnnual, kidsFutureAnnual, payoffAnnual;
     if (s.splitMode === "percent") {
       vacationAnnual = annualSurplus * (s.vacationPct / 100);
       savingsAnnual = annualSurplus * (s.savingsPct / 100);
+      kidsFutureAnnual = annualSurplus * (s.kidsFuturePct / 100);
       payoffAnnual = annualSurplus * (s.payoffPct / 100);
     } else {
       vacationAnnual = s.vacationDollar;
       savingsAnnual = s.savingsDollar;
-      payoffAnnual = annualSurplus - s.vacationDollar - s.savingsDollar;
+      kidsFutureAnnual = s.kidsFutureDollar;
+      payoffAnnual = annualSurplus - s.vacationDollar - s.savingsDollar - s.kidsFutureDollar;
     }
 
     const totalMonthlyBudget = categoriesTotal + housingCost + retirementDollar + titheRegularMonthly;
@@ -1313,7 +1326,7 @@
       housingCost: housingCost, retirementDollar: retirementDollar, grossMonthlyCombined: grossMonthlyCombined,
       categoriesTotal: categoriesTotal, totalMonthlyBudget: totalMonthlyBudget,
       annualSurplus: annualSurplus, quarterlySurplus: quarterlySurplus, monthlySurplus: monthlySurplus,
-      vacationAnnual: vacationAnnual, savingsAnnual: savingsAnnual, payoffAnnual: payoffAnnual,
+      vacationAnnual: vacationAnnual, savingsAnnual: savingsAnnual, kidsFutureAnnual: kidsFutureAnnual, payoffAnnual: payoffAnnual,
       annualDeductions: annualDeductions, titheAnnual: titheAnnual, taxAnnual: taxAnnual
     };
   }
@@ -1576,22 +1589,31 @@
     document.getElementById("split-percent").addEventListener("click", function () { state.surplus.splitMode = "percent"; saveState(); renderAll(); });
     document.getElementById("split-dollar").addEventListener("click", function () { state.surplus.splitMode = "dollar"; saveState(); renderAll(); });
 
+    function recomputePayoffPct() {
+      const s = state.surplus;
+      s.payoffPct = 100 - s.vacationPct - s.savingsPct - s.kidsFuturePct;
+    }
     document.getElementById("s-vacationPct").addEventListener("input", function (e) {
-      const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-      state.surplus.vacationPct = v;
-      state.surplus.payoffPct = 100 - v - state.surplus.savingsPct;
+      state.surplus.vacationPct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+      recomputePayoffPct();
       saveState();
       renderAll();
     });
     document.getElementById("s-savingsPct").addEventListener("input", function (e) {
-      const v = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-      state.surplus.savingsPct = v;
-      state.surplus.payoffPct = 100 - state.surplus.vacationPct - v;
+      state.surplus.savingsPct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+      recomputePayoffPct();
+      saveState();
+      renderAll();
+    });
+    document.getElementById("s-kidsFuturePct").addEventListener("input", function (e) {
+      state.surplus.kidsFuturePct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+      recomputePayoffPct();
       saveState();
       renderAll();
     });
     bindNumber("s-vacationDollar", function () { return state.surplus.vacationDollar; }, function (v) { state.surplus.vacationDollar = v; });
     bindNumber("s-savingsDollar", function () { return state.surplus.savingsDollar; }, function (v) { state.surplus.savingsDollar = v; });
+    bindNumber("s-kidsFutureDollar", function () { return state.surplus.kidsFutureDollar; }, function (v) { state.surplus.kidsFutureDollar = v; });
 
     bindNumber("r-currentAge", function () { return state.retirement.currentAge; }, function (v) { state.retirement.currentAge = v; });
     bindNumber("r-retirementAge", function () { return state.retirement.retirementAge; }, function (v) { state.retirement.retirementAge = v; });
@@ -2000,6 +2022,7 @@
     document.getElementById("out-taxAnnual").textContent = fmt$(out.taxAnnual);
     document.getElementById("out-vacationAnnual").textContent = fmt$(out.vacationAnnual);
     document.getElementById("out-savingsAnnual").textContent = fmt$(out.savingsAnnual);
+    document.getElementById("out-kidsFutureAnnual").textContent = fmt$(out.kidsFutureAnnual);
     document.getElementById("out-payoffAnnual").textContent = fmt$(out.payoffAnnual);
     document.getElementById("s-payoffPct").value = state.surplus.payoffPct;
     document.getElementById("s-payoffDollar").value = Math.round(out.payoffAnnual);
@@ -2027,17 +2050,20 @@
 
     document.getElementById("split-percent").classList.toggle("active", s.splitMode === "percent");
     document.getElementById("split-dollar").classList.toggle("active", s.splitMode === "dollar");
-    document.getElementById("split-percent-fields").style.display = s.splitMode === "percent" ? "flex" : "none";
-    document.getElementById("split-dollar-fields").style.display = s.splitMode === "dollar" ? "flex" : "none";
+    document.getElementById("split-percent-fields").style.display = s.splitMode === "percent" ? "block" : "none";
+    document.getElementById("split-dollar-fields").style.display = s.splitMode === "dollar" ? "block" : "none";
     document.getElementById("s-vacationPct").value = s.vacationPct;
     document.getElementById("s-savingsPct").value = s.savingsPct;
+    document.getElementById("s-kidsFuturePct").value = s.kidsFuturePct;
     document.getElementById("s-payoffPct").value = s.payoffPct;
     document.getElementById("s-vacationDollar").value = s.vacationDollar;
     document.getElementById("s-savingsDollar").value = s.savingsDollar;
+    document.getElementById("s-kidsFutureDollar").value = s.kidsFutureDollar;
     document.getElementById("s-payoffDollar").value = Math.round(out.payoffAnnual);
 
     document.getElementById("out-vacationAnnual").textContent = fmt$(out.vacationAnnual);
     document.getElementById("out-savingsAnnual").textContent = fmt$(out.savingsAnnual);
+    document.getElementById("out-kidsFutureAnnual").textContent = fmt$(out.kidsFutureAnnual);
     document.getElementById("out-payoffAnnual").textContent = fmt$(out.payoffAnnual);
   }
 
