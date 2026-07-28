@@ -525,9 +525,19 @@
             <input type="checkbox" id="s-titheRegular">
             <label for="s-titheRegular">Tithe 10% of this gross (subtracted last, after tax/HSA/health insurance/retirement)</label>
           </div>
-          <div class="field">
-            <label>Gross bonus pay (quarterly $)</label>
-            <input type="number" id="s-grossBonusQuarterly" step="100">
+          <div class="field-row">
+            <div class="field">
+              <label id="s-grossBonusLabel">Gross bonus pay ($)</label>
+              <input type="number" id="s-grossBonusAmount" step="100">
+            </div>
+            <div class="field">
+              <label>Frequency</label>
+              <select id="s-bonusFrequency">
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="annually">Annually</option>
+              </select>
+            </div>
           </div>
           <div class="checkbox-row">
             <input type="checkbox" id="s-titheBonus">
@@ -554,7 +564,7 @@
           <div class="stat"><span>Annual</span><span class="val" id="out-surplusAnnual"></span></div>
           <div class="stat"><span>Quarterly</span><span class="val" id="out-surplusQuarterly"></span></div>
           <div class="stat total"><span>Monthly</span><span class="val" id="out-surplusMonthly"></span></div>
-          <div class="note">Annual surplus = (net regular pay &times; 12) + (net bonus pay &times; 4) &minus; (budget categories + housing + retirement) &times; 12 &minus; tithe.</div>
+          <div class="note">Annual surplus = (net regular pay &times; 12) + (net bonus pay &times; <span id="s-bonusMultiplierNote"></span>) &minus; (budget categories + housing + retirement) &times; 12 &minus; tithe.</div>
 
           <div class="stat total"><span>Total monthly budget</span><span class="val" id="out-totalMonthlyBudget"></span></div>
           <div class="note">Budget categories + housing + retirement + tithe on regular pay. Excludes tithe on the quarterly bonus, which isn't a monthly cost.</div>
@@ -906,7 +916,8 @@
     surplus: {
       grossRegularMonthly: 7083,
       titheRegular: false,
-      grossBonusQuarterly: 500,
+      grossBonusAmount: 500,
+      bonusFrequency: "quarterly",
       titheBonus: false,
       taxRate: 20.0,
       hsaMonthly: 0,
@@ -985,6 +996,18 @@
     }
   }
 
+  // Pre-dates configurable bonus frequency: old saves/exports have
+  // surplus.grossBonusQuarterly (always quarterly) but no grossBonusAmount,
+  // so carry that dollar figure over instead of reverting to the default.
+  function migrateLegacyBonusFrequency(target, source) {
+    if (source && source.surplus && source.surplus.grossBonusQuarterly !== undefined &&
+      source.surplus.grossBonusAmount === undefined) {
+      target.surplus.grossBonusAmount = source.surplus.grossBonusQuarterly;
+      target.surplus.bonusFrequency = "quarterly";
+    }
+    delete target.surplus.grossBonusQuarterly;
+  }
+
   function loadState() {
     let saved = null;
     try {
@@ -993,6 +1016,7 @@
     } catch (e) { /* ignore corrupt storage */ }
     state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), saved || {});
     migrateLegacyCategories(state, saved);
+    migrateLegacyBonusFrequency(state, saved);
     if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
   }
 
@@ -1348,6 +1372,9 @@
     };
   }
 
+  const BONUS_FREQ_PER_YEAR = { monthly: 12, quarterly: 4, annually: 1 };
+  const BONUS_FREQ_LABELS = { monthly: "monthly", quarterly: "quarterly", annually: "annual" };
+
   function computeSurplus() {
     const s = state.surplus;
     const housing = computeHousing();
@@ -1360,21 +1387,22 @@
     const taxRegularMonthly = taxableRegular * taxRate;
     const netRegularPretithe = taxableRegular - taxRegularMonthly;
 
-    const taxableBonus = s.grossBonusQuarterly;
-    const taxBonusQuarterly = taxableBonus * taxRate;
-    const netBonusPretithe = taxableBonus - taxBonusQuarterly;
+    const bonusPerYear = BONUS_FREQ_PER_YEAR[s.bonusFrequency] || 4;
+    const taxableBonus = s.grossBonusAmount;
+    const taxBonusPerOccurrence = taxableBonus * taxRate;
+    const netBonusPretithe = taxableBonus - taxBonusPerOccurrence;
 
-    const grossMonthlyCombined = s.grossRegularMonthly + s.grossBonusQuarterly / 3;
+    const grossMonthlyCombined = s.grossRegularMonthly + (s.grossBonusAmount * bonusPerYear) / 12;
     const retirementDollar = grossMonthlyCombined * (s.retirementPct / 100);
 
     const categoriesTotal = s.categories.reduce(function (sum, c) { return sum + (Number(c.amount) || 0); }, 0);
 
-    const annualPretithe = netRegularPretithe * 12 + netBonusPretithe * 4;
+    const annualPretithe = netRegularPretithe * 12 + netBonusPretithe * bonusPerYear;
     const annualDeductions = (categoriesTotal + housingCost + retirementDollar) * 12;
     const titheRegularMonthly = s.titheRegular ? s.grossRegularMonthly * 0.10 : 0;
     const titheAnnual = titheRegularMonthly * 12 +
-      (s.titheBonus ? s.grossBonusQuarterly * 4 * 0.10 : 0);
-    const taxAnnual = taxRegularMonthly * 12 + taxBonusQuarterly * 4;
+      (s.titheBonus ? s.grossBonusAmount * bonusPerYear * 0.10 : 0);
+    const taxAnnual = taxRegularMonthly * 12 + taxBonusPerOccurrence * bonusPerYear;
 
     const annualSurplus = annualPretithe - annualDeductions - titheAnnual;
     const quarterlySurplus = annualSurplus / 4;
@@ -1769,7 +1797,12 @@
 
     bindNumber("s-grossRegularMonthly", function () { return state.surplus.grossRegularMonthly; }, function (v) { state.surplus.grossRegularMonthly = v; });
     bindCheckbox("s-titheRegular", function () { return state.surplus.titheRegular; }, function (v) { state.surplus.titheRegular = v; });
-    bindNumber("s-grossBonusQuarterly", function () { return state.surplus.grossBonusQuarterly; }, function (v) { state.surplus.grossBonusQuarterly = v; });
+    bindNumber("s-grossBonusAmount", function () { return state.surplus.grossBonusAmount; }, function (v) { state.surplus.grossBonusAmount = v; });
+    document.getElementById("s-bonusFrequency").addEventListener("change", function (e) {
+      state.surplus.bonusFrequency = e.target.value;
+      saveState();
+      renderAll();
+    });
     bindCheckbox("s-titheBonus", function () { return state.surplus.titheBonus; }, function (v) { state.surplus.titheBonus = v; });
     bindNumber("s-taxRate", function () { return state.surplus.taxRate; }, function (v) { state.surplus.taxRate = v; });
     bindNumber("s-hsaMonthly", function () { return state.surplus.hsaMonthly; }, function (v) { state.surplus.hsaMonthly = v; });
@@ -2288,6 +2321,10 @@
     const out = computeSurplus();
 
     renderSurplusCategoryList();
+
+    document.getElementById("s-bonusFrequency").value = s.bonusFrequency;
+    document.getElementById("s-grossBonusLabel").textContent = "Gross bonus pay (" + BONUS_FREQ_LABELS[s.bonusFrequency] + " $)";
+    document.getElementById("s-bonusMultiplierNote").textContent = BONUS_FREQ_PER_YEAR[s.bonusFrequency];
 
     document.getElementById("s-housingCalculated").textContent = fmt$(computeHousing().totalMonthly);
     document.getElementById("s-housingOverride").value = s.housingOverrideActive ? s.housingOverride : Math.round(computeHousing().totalMonthly);
@@ -2969,6 +3006,7 @@
           const imported = JSON.parse(reader.result);
           state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), imported);
           migrateLegacyCategories(state, imported);
+          migrateLegacyBonusFrequency(state, imported);
           if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
           saveState();
           syncStaticFields();
