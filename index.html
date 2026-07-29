@@ -830,14 +830,10 @@
 
       <div class="card full-width">
         <h2>Children</h2>
-        <p class="hint">Add each child, then choose a 529 plan and/or brokerage account for their savings. Allocations are a % of the total annual contribution above.</p>
+        <p class="hint">Add each child, then set up a 529 plan for their savings. Allocations are a % of the total annual contribution above.</p>
         <div class="checkbox-row">
           <input type="checkbox" id="k-easy529">
           <label for="k-easy529">Balance all 529 plans to an equal projected ending balance</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="k-easyBrokerage">
-          <label for="k-easyBrokerage">Balance all brokerage accounts to an equal projected ending balance</label>
         </div>
         <div id="k-child-list"></div>
         <button class="btn" id="k-add-child" type="button">+ Add child</button>
@@ -958,9 +954,7 @@
       children: [],
       increaseByYear: {},
       easy529: false,
-      easyBrokerage: false,
-      easy529TotalPct: 0,
-      easyBrokerageTotalPct: 0
+      easy529TotalPct: 0
     }
   };
 
@@ -1008,6 +1002,14 @@
     delete target.surplus.grossBonusQuarterly;
   }
 
+  // Pre-dates removing brokerage accounts: children arrays are replaced
+  // wholesale on merge (not deep-merged like plain objects), so old saves
+  // with a per-child brokerage sub-object would otherwise carry it forward
+  // as unused, orphaned data.
+  function migrateLegacyBrokerage(target) {
+    (target.kids.children || []).forEach(function (child) { delete child.brokerage; });
+  }
+
   function loadState() {
     let saved = null;
     try {
@@ -1017,6 +1019,7 @@
     state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), saved || {});
     migrateLegacyCategories(state, saved);
     migrateLegacyBonusFrequency(state, saved);
+    migrateLegacyBrokerage(state);
     if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
   }
 
@@ -1569,10 +1572,10 @@
     return amt;
   }
 
-  // Simulates one child's one account (529 or brokerage) from the plan start
-  // month until the child reaches targetAge, contributing pct% of that
-  // month's total pool, monthly-compounded at returnRatePct. Mirrors the
-  // retirement engine's loop/point-sampling shape so both can share a chart.
+  // Simulates one child's 529 plan from the plan start month until the child
+  // reaches targetAge, contributing pct% of that month's total pool,
+  // monthly-compounded at returnRatePct. Mirrors the retirement engine's
+  // loop/point-sampling shape so both can share a chart.
   function kidsAccountProjection(dob, targetAge, returnRatePct, pct, startMonthDate, baseAnnualPool, overridesSorted) {
     const dobMonthDate = new Date(dob.getFullYear(), dob.getMonth(), 1);
     const startAge = (goalsMonthKey(startMonthDate) - goalsMonthKey(dobMonthDate)) / 12;
@@ -1609,13 +1612,13 @@
     return fvAtStart * Math.pow(g, n - 1) * (g - 1) / (Math.pow(g, n) - 1);
   }
 
-  // Recomputes allocPct for every eligible child's account of `accountKey`
-  // ("plan529" or "brokerage") so all end at an equal projected balance,
-  // holding the total % committed (captured when the easy toggle was
-  // switched on) fixed. FV is linear in pct (starting balance is always 0),
-  // so a single pct=100 simulation per child gives the scaling factor needed
-  // to solve for the shared target balance directly — no iteration needed.
-  function kidsApplyEasyAllocation(accountKey, targetAgeKey, totalPctField) {
+  // Recomputes allocPct for every eligible child's 529 plan so all end at an
+  // equal projected balance, holding the total % committed (captured when
+  // the easy toggle was switched on) fixed. FV is linear in pct (starting
+  // balance is always 0), so a single pct=100 simulation per child gives the
+  // scaling factor needed to solve for the shared target balance directly —
+  // no iteration needed.
+  function kidsApplyEasyAllocation() {
     const k = state.kids;
     const startMonthDate = kidsStartMonthDate();
     const baseAnnualPool = computeSurplus().kidsFutureAnnual;
@@ -1624,15 +1627,15 @@
 
     const eligible = [];
     k.children.forEach(function (child) {
-      const acct = child[accountKey];
+      const acct = child.plan529;
       const dob = goalsParseYMD(child.dob);
       if (!acct || !acct.enabled || !dob) return;
-      const proj = kidsAccountProjection(dob, acct[targetAgeKey], acct.returnRatePct, 100, startMonthDate, baseAnnualPool, overridesSorted);
+      const proj = kidsAccountProjection(dob, acct.collegeAge, acct.returnRatePct, 100, startMonthDate, baseAnnualPool, overridesSorted);
       if (proj.months > 0 && proj.balance > 0) eligible.push({ child: child, acct: acct, fvUnit: proj.balance });
     });
     if (!eligible.length) return;
 
-    const totalPct = k[totalPctField];
+    const totalPct = k.easy529TotalPct;
     const denom = eligible.reduce(function (sum, e) { return sum + 100 / e.fvUnit; }, 0);
     const targetBalance = totalPct / denom;
     eligible.forEach(function (e) {
@@ -1647,35 +1650,26 @@
     const overridesSorted = Object.keys(k.increaseByYear).map(Number).sort(function (a, b) { return a - b; })
       .map(function (y) { return [y, Number(k.increaseByYear[y])]; });
 
-    if (k.easy529) kidsApplyEasyAllocation("plan529", "collegeAge", "easy529TotalPct");
-    if (k.easyBrokerage) kidsApplyEasyAllocation("brokerage", "withdrawAge", "easyBrokerageTotalPct");
+    if (k.easy529) kidsApplyEasyAllocation();
 
-    function accountOutput(child, accountKey) {
-      const acct = child[accountKey];
+    function accountOutput(child) {
+      const acct = child.plan529;
       if (!acct || !acct.enabled) return null;
       const dob = goalsParseYMD(child.dob);
-      const targetAge = accountKey === "plan529" ? acct.collegeAge : acct.withdrawAge;
       const dollarAmountToday = baseAnnualPool * (acct.allocPct / 100);
       if (!dob) return { noDob: true, allocPct: acct.allocPct, dollarAmountToday: dollarAmountToday };
 
-      const proj = kidsAccountProjection(dob, targetAge, acct.returnRatePct, acct.allocPct, startMonthDate, baseAnnualPool, overridesSorted);
-      const out = {
+      const proj = kidsAccountProjection(dob, acct.collegeAge, acct.returnRatePct, acct.allocPct, startMonthDate, baseAnnualPool, overridesSorted);
+      return {
         allocPct: acct.allocPct, dollarAmountToday: dollarAmountToday,
         balance: proj.balance, contributed: proj.contributed, earned: proj.balance - proj.contributed,
-        months: proj.months, points: proj.points, targetAge: targetAge
+        months: proj.months, points: proj.points, targetAge: acct.collegeAge,
+        withdrawalPerYear: kids529WithdrawalAmount(proj.balance, acct.returnRatePct, 4)
       };
-      if (accountKey === "plan529") {
-        out.withdrawalPerYear = kids529WithdrawalAmount(proj.balance, acct.returnRatePct, 4);
-      }
-      return out;
     }
 
     const children = k.children.map(function (child) {
-      return {
-        id: child.id, name: child.name, dob: child.dob,
-        plan529: accountOutput(child, "plan529"),
-        brokerage: accountOutput(child, "brokerage")
-      };
+      return { id: child.id, name: child.name, dob: child.dob, plan529: accountOutput(child) };
     });
 
     return { baseAnnualPool: baseAnnualPool, startMonthDate: startMonthDate, children: children };
@@ -1906,27 +1900,20 @@
       state.kids.childId += 1;
       state.kids.children.push({
         id: state.kids.childId, name: "", dob: "",
-        plan529: { enabled: false, allocPct: 0, returnRatePct: 6, collegeAge: 18 },
-        brokerage: { enabled: false, allocPct: 0, returnRatePct: 7, withdrawAge: 18 }
+        plan529: { enabled: false, allocPct: 0, returnRatePct: 6, collegeAge: 18 }
       });
       saveState();
       renderAll();
     });
 
-    function kidsSumAllocPct(accountKey) {
+    function kidsSumAllocPct() {
       return state.kids.children.reduce(function (sum, c) {
-        return sum + (c[accountKey].enabled ? (Number(c[accountKey].allocPct) || 0) : 0);
+        return sum + (c.plan529.enabled ? (Number(c.plan529.allocPct) || 0) : 0);
       }, 0);
     }
     document.getElementById("k-easy529").addEventListener("change", function (e) {
-      if (e.target.checked) state.kids.easy529TotalPct = kidsSumAllocPct("plan529");
+      if (e.target.checked) state.kids.easy529TotalPct = kidsSumAllocPct();
       state.kids.easy529 = e.target.checked;
-      saveState();
-      renderAll();
-    });
-    document.getElementById("k-easyBrokerage").addEventListener("change", function (e) {
-      if (e.target.checked) state.kids.easyBrokerageTotalPct = kidsSumAllocPct("brokerage");
-      state.kids.easyBrokerage = e.target.checked;
       saveState();
       renderAll();
     });
@@ -2701,7 +2688,6 @@
   function renderKids() {
     document.getElementById("k-startDate").value = state.kids.startDate;
     document.getElementById("k-easy529").checked = state.kids.easy529;
-    document.getElementById("k-easyBrokerage").checked = state.kids.easyBrokerage;
     renderKidsYearRows();
     renderKidsChildList();
     renderKidsOutputsOnly();
@@ -2750,7 +2736,7 @@
     });
   }
 
-  function kidsOutputStatsHtml(output, isFiveTwoNine) {
+  function kidsOutputStatsHtml(output) {
     if (!output) return "";
     if (output.noDob) {
       return '<p class="hint">Enter a date of birth to see the projection.</p>';
@@ -2758,16 +2744,13 @@
     if (output.months <= 0) {
       return '<p class="hint">Target age is already reached as of the plan start date.</p>';
     }
-    let html = ''
+    return ''
       + '<div class="stat"><span>Years until target age</span><span class="val">' + (output.months / 12).toFixed(1) + '</span></div>'
       + '<div class="stat total"><span>Projected balance</span><span class="val">' + fmt$(output.balance) + '</span></div>'
       + '<div class="stat"><span>Contributed</span><span class="val">' + fmt$(output.contributed) + '</span></div>'
-      + '<div class="stat"><span>Earned (growth)</span><span class="val">' + fmt$(output.earned) + '</span></div>';
-    if (isFiveTwoNine) {
-      html += '<div class="stat total"><span>Available each of 4 college years</span><span class="val">' + fmt$(output.withdrawalPerYear) + ' / yr</span></div>';
-    }
-    html += '<div class="chart-wrap kids-mini-chart"></div>';
-    return html;
+      + '<div class="stat"><span>Earned (growth)</span><span class="val">' + fmt$(output.earned) + '</span></div>'
+      + '<div class="stat total"><span>Available each of 4 college years</span><span class="val">' + fmt$(output.withdrawalPerYear) + ' / yr</span></div>'
+      + '<div class="chart-wrap kids-mini-chart"></div>';
   }
 
   // Field-level edits below only update state + saveState() then refresh via
@@ -2802,17 +2785,6 @@
         + '</div>'
         + '<div class="k-c-529-output"></div>'
         + '</div>'
-        + '</div>'
-        + '<div class="subcard">'
-        + '<div class="checkbox-row"><input type="checkbox" class="k-c-brok-enabled"><label>Brokerage account</label></div>'
-        + '<div class="kids-acct-fields k-c-brok-fields">'
-        + '<div class="field-row">'
-        + '<div class="field"><label>Allocation (% of total pool)</label><input type="number" step="1" min="0" max="100" class="k-c-brok-pct"><div class="derived k-c-brok-dollar"></div></div>'
-        + '<div class="field"><label>Rate of return (%)</label><input type="number" step="0.25" class="k-c-brok-rate"></div>'
-        + '<div class="field"><label>Withdrawal age</label><input type="number" step="1" min="1" class="k-c-brok-age"></div>'
-        + '</div>'
-        + '<div class="k-c-brok-output"></div>'
-        + '</div>'
         + '</div>';
 
       const header = card.querySelector(".subcard-header");
@@ -2834,44 +2806,40 @@
       nameInput.addEventListener("input", function (e) { child.name = e.target.value; saveState(); renderKidsOutputsOnly(); });
       dobInput.addEventListener("input", function (e) { child.dob = e.target.value; saveState(); renderKidsOutputsOnly(); });
 
-      function wireAccount(prefix, acctKey, ageKey, easyFlagKey) {
-        const enabledEl = card.querySelector("." + prefix + "-enabled");
-        const fieldsEl = card.querySelector("." + prefix + "-fields");
-        const pctEl = card.querySelector("." + prefix + "-pct");
-        const rateEl = card.querySelector("." + prefix + "-rate");
-        const ageEl = card.querySelector("." + prefix + "-age");
-        const acct = child[acctKey];
+      const enabledEl = card.querySelector(".k-c-529-enabled");
+      const fieldsEl = card.querySelector(".k-c-529-fields");
+      const pctEl = card.querySelector(".k-c-529-pct");
+      const rateEl = card.querySelector(".k-c-529-rate");
+      const ageEl = card.querySelector(".k-c-529-age");
+      const acct = child.plan529;
 
-        enabledEl.checked = acct.enabled;
-        fieldsEl.classList.toggle("on", acct.enabled);
-        pctEl.value = acct.allocPct;
-        pctEl.disabled = state.kids[easyFlagKey];
-        rateEl.value = acct.returnRatePct;
-        ageEl.value = acct[ageKey];
+      enabledEl.checked = acct.enabled;
+      fieldsEl.classList.toggle("on", acct.enabled);
+      pctEl.value = acct.allocPct;
+      pctEl.disabled = state.kids.easy529;
+      rateEl.value = acct.returnRatePct;
+      ageEl.value = acct.collegeAge;
 
-        enabledEl.addEventListener("change", function (e) {
-          acct.enabled = e.target.checked;
-          saveState();
-          renderAll();
-        });
-        pctEl.addEventListener("input", function (e) {
-          acct.allocPct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-          saveState();
-          renderKidsOutputsOnly();
-        });
-        rateEl.addEventListener("input", function (e) {
-          acct.returnRatePct = Number(e.target.value) || 0;
-          saveState();
-          renderKidsOutputsOnly();
-        });
-        ageEl.addEventListener("input", function (e) {
-          acct[ageKey] = Number(e.target.value) || 0;
-          saveState();
-          renderKidsOutputsOnly();
-        });
-      }
-      wireAccount("k-c-529", "plan529", "collegeAge", "easy529");
-      wireAccount("k-c-brok", "brokerage", "withdrawAge", "easyBrokerage");
+      enabledEl.addEventListener("change", function (e) {
+        acct.enabled = e.target.checked;
+        saveState();
+        renderAll();
+      });
+      pctEl.addEventListener("input", function (e) {
+        acct.allocPct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+        saveState();
+        renderKidsOutputsOnly();
+      });
+      rateEl.addEventListener("input", function (e) {
+        acct.returnRatePct = Number(e.target.value) || 0;
+        saveState();
+        renderKidsOutputsOnly();
+      });
+      ageEl.addEventListener("input", function (e) {
+        acct.collegeAge = Number(e.target.value) || 0;
+        saveState();
+        renderKidsOutputsOnly();
+      });
 
       listEl.appendChild(card);
     });
@@ -2905,39 +2873,34 @@
       const titleEl = cardEl.querySelector(".k-title");
       titleEl.textContent = child.name ? child.name : ("Child " + (i + 1));
 
-      [
-        { prefix: "k-c-529", acctKey: "plan529", isFiveTwoNine: true, easyFlagKey: "easy529" },
-        { prefix: "k-c-brok", acctKey: "brokerage", isFiveTwoNine: false, easyFlagKey: "easyBrokerage" }
-      ].forEach(function (spec) {
-        const acct = child[spec.acctKey];
-        const pctEl = cardEl.querySelector("." + spec.prefix + "-pct");
-        const dollarEl = cardEl.querySelector("." + spec.prefix + "-dollar");
-        const outputEl = cardEl.querySelector("." + spec.prefix + "-output");
+      const acct = child.plan529;
+      const pctEl = cardEl.querySelector(".k-c-529-pct");
+      const dollarEl = cardEl.querySelector(".k-c-529-dollar");
+      const outputEl = cardEl.querySelector(".k-c-529-output");
 
-        pctEl.value = acct.allocPct;
-        pctEl.disabled = state.kids[spec.easyFlagKey];
-        dollarEl.textContent = fmt$(out.baseAnnualPool * (acct.allocPct / 100)) + " / yr";
+      pctEl.value = acct.allocPct;
+      pctEl.disabled = state.kids.easy529;
+      dollarEl.textContent = fmt$(out.baseAnnualPool * (acct.allocPct / 100)) + " / yr";
 
-        if (!acct.enabled) { outputEl.innerHTML = ""; return; }
-        const acctOut = childOut[spec.acctKey];
-        outputEl.innerHTML = kidsOutputStatsHtml(acctOut, spec.isFiveTwoNine);
+      if (!acct.enabled) { outputEl.innerHTML = ""; return; }
+      const acctOut = childOut.plan529;
+      outputEl.innerHTML = kidsOutputStatsHtml(acctOut);
 
-        if (acctOut && !acctOut.noDob && acctOut.months > 0 && acctOut.points.length > 1) {
-          const chartWrap = outputEl.querySelector(".kids-mini-chart");
-          const chartId = "k-chart-" + child.id + "-" + spec.acctKey;
-          chartWrap.id = chartId;
-          renderTimelineChart({
-            wrapId: chartId,
-            points: acctOut.points,
-            seriesConfig: [
-              { key: "balance", label: "Balance", varName: "--series-balance" },
-              { key: "contributed", label: "Contributed", varName: "--series-contributed" },
-              { key: "earned", label: "Earned", varName: "--series-earned" }
-            ],
-            emptyMessage: "Not enough time before target age to chart."
-          });
-        }
-      });
+      if (acctOut && !acctOut.noDob && acctOut.months > 0 && acctOut.points.length > 1) {
+        const chartWrap = outputEl.querySelector(".kids-mini-chart");
+        const chartId = "k-chart-" + child.id + "-plan529";
+        chartWrap.id = chartId;
+        renderTimelineChart({
+          wrapId: chartId,
+          points: acctOut.points,
+          seriesConfig: [
+            { key: "balance", label: "Balance", varName: "--series-balance" },
+            { key: "contributed", label: "Contributed", varName: "--series-contributed" },
+            { key: "earned", label: "Earned", varName: "--series-earned" }
+          ],
+          emptyMessage: "Not enough time before target age to chart."
+        });
+      }
     });
   }
 
@@ -3007,6 +2970,7 @@
           state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), imported);
           migrateLegacyCategories(state, imported);
           migrateLegacyBonusFrequency(state, imported);
+          migrateLegacyBrokerage(state);
           if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
           saveState();
           syncStaticFields();
