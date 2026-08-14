@@ -80,6 +80,8 @@
   .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .btn.danger { color: var(--bad); }
   .btn.small { padding: 4px 9px; font-size: 0.78rem; }
+  .btn:disabled { opacity: 0.35; cursor: default; }
+  .btn:disabled:hover { border-color: var(--border); }
   nav.tabs {
     display: flex;
     gap: 4px;
@@ -355,7 +357,7 @@
 
       <div class="card full-width">
         <h2>Additional goals</h2>
-        <p class="hint">Add as many extra goals as you want &mdash; a new car, additional emergency savings, whatever. These come last in the priority order, so money earmarked for loans, the emergency fund, and the house down payment above is never diverted to them; each additional goal only receives cash that's still left over after the goals before it (including earlier additional goals) are fully funded.</p>
+        <p class="hint">Add as many extra goals as you want &mdash; a new car, additional emergency savings, whatever. These come last in the priority order, so money earmarked for loans, the emergency fund, and the house down payment above is never diverted to them; each additional goal only receives cash that's still left over after the goals before it (including earlier additional goals) are fully funded. Use the &uarr; / &darr; buttons to reorder them &mdash; the order here sets their priority and goal number in the timeline below.</p>
         <div id="g-custom-goal-list"></div>
         <button class="btn" id="g-add-custom-goal" type="button">+ Add goal</button>
       </div>
@@ -2089,6 +2091,45 @@
         '</div>';
 
       const header = card.querySelector(".subcard-header");
+
+      const moveUpBtn = document.createElement("button");
+      moveUpBtn.className = "btn small";
+      moveUpBtn.type = "button";
+      moveUpBtn.textContent = "↑";
+      moveUpBtn.title = "Move up (higher priority)";
+      moveUpBtn.disabled = i === 0;
+      moveUpBtn.addEventListener("click", function () {
+        const arr = state.goals.customGoals;
+        const idx = arr.findIndex(function (x) { return x.id === cg.id; });
+        if (idx > 0) {
+          const tmp = arr[idx - 1];
+          arr[idx - 1] = arr[idx];
+          arr[idx] = tmp;
+          saveState();
+          renderAll();
+        }
+      });
+      header.appendChild(moveUpBtn);
+
+      const moveDownBtn = document.createElement("button");
+      moveDownBtn.className = "btn small";
+      moveDownBtn.type = "button";
+      moveDownBtn.textContent = "↓";
+      moveDownBtn.title = "Move down (lower priority)";
+      moveDownBtn.disabled = i === customGoals.length - 1;
+      moveDownBtn.addEventListener("click", function () {
+        const arr = state.goals.customGoals;
+        const idx = arr.findIndex(function (x) { return x.id === cg.id; });
+        if (idx > -1 && idx < arr.length - 1) {
+          const tmp = arr[idx + 1];
+          arr[idx + 1] = arr[idx];
+          arr[idx] = tmp;
+          saveState();
+          renderAll();
+        }
+      });
+      header.appendChild(moveDownBtn);
+
       const removeBtn = document.createElement("button");
       removeBtn.className = "btn small danger";
       removeBtn.type = "button";
