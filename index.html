@@ -312,7 +312,7 @@
 
       <div class="card full-width">
         <h2>Contributions</h2>
-        <p class="hint">Each rule applies across all enabled goals below, in sequence &mdash; leftover cash after each goal rolls forward automatically to the next.</p>
+        <p class="hint">Each rule applies across all enabled goals below, in sequence &mdash; leftover cash after each goal rolls forward automatically to the next. Give a contribution a name to label it (e.g. "RSU Vest", "Paycheck"). The list is kept sorted by date automatically.</p>
         <div id="g-contrib-list"></div>
         <button class="btn" id="g-add-contrib" type="button">+ Add contribution</button>
       </div>
@@ -1115,6 +1115,19 @@
   function goalsFmtDate(d) { return d.toLocaleString("default", { month: "long", year: "numeric" }); }
   function goalsMonthKey(d) { return d.getFullYear() * 12 + d.getMonth(); }
   function goalsAddMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
+  function goalsContribSortDate(c) {
+    return c.freq === "oneoff" ? goalsParseYMD(c.day) : goalsParseYM(c.start);
+  }
+  // Undated contributions sort to the end, stable relative order preserved.
+  function goalsSortedContribs(contribs) {
+    return contribs.slice().sort(function (a, b) {
+      const da = goalsContribSortDate(a), db = goalsContribSortDate(b);
+      if (da && db) return da - db;
+      if (da && !db) return -1;
+      if (!da && db) return 1;
+      return 0;
+    });
+  }
 
   function goalsBuildCashMap(contribs, simStart, simEnd) {
     const map = new Map();
@@ -2027,8 +2040,8 @@
         '<div class="subcard-header"><span class="title">Loan ' + (i + 1) + '</span></div>' +
         '<div class="field-row">' +
         '<div class="field"><label>Balance ($)</label><input type="number" step="0.01" min="0" class="g-loan-bal"></div>' +
-        '<div class="field"><label>Annual interest rate (%)</label><input type="number" step="0.01" min="0" class="g-loan-rate"></div>' +
-        '<div class="field"><label>Required monthly payment ($)</label><input type="number" step="0.01" min="0" class="g-loan-min"></div>' +
+        '<div class="field"><label>APR (%)</label><input type="number" step="0.01" min="0" class="g-loan-rate"></div>' +
+        '<div class="field"><label>Monthly payment ($)</label><input type="number" step="0.01" min="0" class="g-loan-min"></div>' +
         '</div>';
 
       const header = card.querySelector(".subcard-header");
@@ -2106,13 +2119,15 @@
       listEl.innerHTML = '<p class="empty-msg">No contributions added yet</p>';
       return;
     }
-    contribs.forEach(function (c, i) {
+    const sorted = goalsSortedContribs(contribs);
+    sorted.forEach(function (c, i) {
       const freq = c.freq || "monthly";
       const isOneoff = freq === "oneoff";
       const card = document.createElement("div");
       card.className = "subcard";
 
-      let fieldsHtml = '<div class="field-row">' +
+      let fieldsHtml = '<div class="field"><label>Name (optional)</label><input type="text" maxlength="60" placeholder="e.g. RSU Vest, Paycheck" class="g-c-name"></div>' +
+        '<div class="field-row">' +
         '<div class="field"><label>Amount ($)</label><input type="number" step="0.01" min="0" class="g-c-amt"></div>' +
         '<div class="field"><label>Frequency</label><select class="g-c-freq">' +
         Object.keys(GOALS_FREQ_LABELS).map(function (f) {
@@ -2129,7 +2144,8 @@
           '</div>';
       }
 
-      card.innerHTML = '<div class="subcard-header"><span class="title">Contribution ' + (i + 1) +
+      const displayName = (c.name || "").trim() || ("Contribution " + (i + 1));
+      card.innerHTML = '<div class="subcard-header"><span class="title">' + displayName +
         '</span><span class="badge neutral">' + GOALS_FREQ_LABELS[freq] + '</span></div>' + fieldsHtml;
 
       const header = card.querySelector(".subcard-header");
@@ -2144,6 +2160,14 @@
       });
       header.appendChild(removeBtn);
 
+      const nameInput = card.querySelector(".g-c-name");
+      nameInput.value = c.name || "";
+      nameInput.addEventListener("input", function (e) { c.name = e.target.value; saveState(); });
+      nameInput.addEventListener("change", function () {
+        const title = header.querySelector(".title");
+        title.textContent = (c.name || "").trim() || ("Contribution " + (i + 1));
+      });
+
       const amtInput = card.querySelector(".g-c-amt");
       amtInput.value = c.amt;
       amtInput.addEventListener("input", function (e) { c.amt = e.target.value; saveState(); });
@@ -2155,16 +2179,21 @@
         renderAll();
       });
 
+      // "change" (fires on blur) re-sorts the list by date once someone
+      // finishes editing — "input" alone would resort mid-keystroke and
+      // steal focus, same reasoning as the no-renderAll-on-input rule above.
       if (isOneoff) {
         const dayInput = card.querySelector(".g-c-day");
         dayInput.value = c.day || "";
         dayInput.addEventListener("input", function (e) { c.day = e.target.value; saveState(); });
+        dayInput.addEventListener("change", function () { renderAll(); });
       } else {
         const startInput = card.querySelector(".g-c-start");
         const endInput = card.querySelector(".g-c-end");
         startInput.value = c.start || "";
         endInput.value = c.end || "";
         startInput.addEventListener("input", function (e) { c.start = e.target.value; saveState(); });
+        startInput.addEventListener("change", function () { renderAll(); });
         endInput.addEventListener("input", function (e) { c.end = e.target.value; saveState(); });
       }
 
