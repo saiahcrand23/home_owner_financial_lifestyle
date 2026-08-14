@@ -227,8 +227,23 @@
   .kids-acct-fields.on { display: block; }
 
   .g-warning { background: var(--accent-dim); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; font-size: 0.85rem; color: var(--text); margin-bottom: 12px; }
-  .g-timeline { display: flex; align-items: stretch; margin: 4px 0 16px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); min-height: 42px; }
-  .g-tlseg { display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; padding: 8px 4px; text-align: center; min-width: 2px; color: var(--text); }
+  .g-tl-list { display: flex; flex-direction: column; gap: 12px; margin: 4px 0 20px; }
+  .g-tl-row { display: grid; grid-template-columns: 24px minmax(110px, 1fr) minmax(90px, 2.2fr) auto; align-items: center; gap: 12px; }
+  .g-tl-num {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--bg); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; font-weight: 700; color: var(--text-dim);
+  }
+  .g-tl-name { font-size: 0.82rem; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .g-tl-track { position: relative; height: 8px; border-radius: 4px; background: var(--border); }
+  .g-tl-fill { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+  .g-tl-meta { font-size: 0.76rem; color: var(--text-dim); white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+  @media (max-width: 560px) {
+    .g-tl-row { grid-template-columns: 24px 1fr; row-gap: 4px; }
+    .g-tl-track { grid-column: 1 / -1; }
+    .g-tl-meta { grid-column: 2 / -1; text-align: left; }
+  }
   .g-phase { border-radius: var(--radius); padding: 18px; text-align: center; margin-bottom: 12px; border: 1px solid var(--border); position: relative; }
   .g-phase::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: var(--radius) var(--radius) 0 0; }
   .g-phase-title { font-size: 0.76rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 6px; color: var(--text-dim); }
@@ -241,18 +256,12 @@
   .g-tl-loan, .g-phase-loan::before { background: var(--series-balance); }
   .g-tl-emerg, .g-phase-emerg::before { background: var(--series-contributed); }
   .g-tl-house, .g-phase-house::before { background: var(--series-earned); }
-  .g-tl-loan { background: color-mix(in srgb, var(--series-balance) 22%, var(--panel)); }
-  .g-tl-emerg { background: color-mix(in srgb, var(--series-contributed) 22%, var(--panel)); }
-  .g-tl-house { background: color-mix(in srgb, var(--series-earned) 22%, var(--panel)); }
   .g-phase-loan { background: color-mix(in srgb, var(--series-balance) 8%, var(--panel)); }
   .g-phase-emerg { background: color-mix(in srgb, var(--series-contributed) 8%, var(--panel)); }
   .g-phase-house { background: color-mix(in srgb, var(--series-earned) 8%, var(--panel)); }
   .g-tl-custom1, .g-phase-custom1::before { background: var(--series-custom1); }
   .g-tl-custom2, .g-phase-custom2::before { background: var(--series-custom2); }
   .g-tl-custom3, .g-phase-custom3::before { background: var(--series-custom3); }
-  .g-tl-custom1 { background: color-mix(in srgb, var(--series-custom1) 22%, var(--panel)); }
-  .g-tl-custom2 { background: color-mix(in srgb, var(--series-custom2) 22%, var(--panel)); }
-  .g-tl-custom3 { background: color-mix(in srgb, var(--series-custom3) 22%, var(--panel)); }
   .g-phase-custom1 { background: color-mix(in srgb, var(--series-custom1) 8%, var(--panel)); }
   .g-phase-custom2 { background: color-mix(in srgb, var(--series-custom2) 8%, var(--panel)); }
   .g-phase-custom3 { background: color-mix(in srgb, var(--series-custom3) 8%, var(--panel)); }
@@ -1342,22 +1351,42 @@
       }
     });
 
-    const segs = [];
-    if (showLoans) segs.push({ cls: "g-tl-loan", label: "Loan", count: loanMonthCount });
-    if (showEmerg) segs.push({ cls: "g-tl-emerg", label: "E-Fund", count: emergMonthCount });
+    // One row per goal for the stepped timeline — each row's fill spans its
+    // slice of the cumulative month count, so rows read top-to-bottom in the
+    // order money actually gets applied, without cramming labels into
+    // proportionally-sized boxes the way a single stacked bar would.
+    const timelineRows = [];
+    let cum = 0;
+    if (showLoans) {
+      timelineRows.push({
+        gn: loanGn, name: "Loan payoff", cls: "g-tl-loan", monthCount: loanMonthCount,
+        start: cum, end: cum + loanMonthCount, dateLabel: loanPhaseEnd, reached: true
+      });
+      cum += loanMonthCount;
+    }
+    if (showEmerg) {
+      timelineRows.push({
+        gn: emergGn, name: "Emergency fund", cls: "g-tl-emerg", monthCount: emergMonthCount,
+        start: cum, end: cum + emergMonthCount, dateLabel: emergPhaseEnd, reached: true
+      });
+      cum += emergMonthCount;
+    }
     postPhases.forEach(function (p) {
-      segs.push({ cls: p.tlCls, label: p.label, count: p.monthCount || 1 });
+      const count = p.monthCount || 0;
+      const hasTarget = p.goal > 0;
+      timelineRows.push({
+        gn: p.gn, name: p.isHouse ? "House down payment" : p.name, cls: p.tlCls, monthCount: count,
+        start: cum, end: cum + count,
+        dateLabel: hasTarget ? p.goalDate : p.finalDate,
+        reached: hasTarget ? !!p.goalDate : null, hasTarget: hasTarget
+      });
+      cum += count;
     });
-    const totalM = segs.reduce(function (s, x) { return s + x.count; }, 0) || 1;
-    let usedPct = 0;
-    segs.forEach(function (seg, i) {
-      seg.pct = i === segs.length - 1 ? Math.max(2, 100 - usedPct) : Math.max(2, Math.round(seg.count / totalM * 100));
-      usedPct += seg.pct;
-    });
+    const timelineTotal = cum || 1;
 
     return {
       error: null, warning: minCoverageWarning,
-      segs: segs,
+      timelineRows: timelineRows, timelineTotal: timelineTotal,
       showLoans: showLoans, showEmerg: showEmerg,
       loanGn: loanGn, emergGn: emergGn,
       loanPhaseEnd: loanPhaseEnd, loanMonthCount: loanMonthCount, totalLoanInterest: totalLoanInterest, totalLoanPayments: totalLoanPayments,
@@ -2299,16 +2328,43 @@
       resultArea.appendChild(warn);
     }
 
-    const timeline = document.createElement("div");
-    timeline.className = "g-timeline";
-    result.segs.forEach(function (seg) {
-      const segEl = document.createElement("div");
-      segEl.className = "g-tlseg " + seg.cls;
-      segEl.style.flex = seg.pct;
-      segEl.textContent = seg.label + " — " + seg.count + " month" + (seg.count === 1 ? "" : "s");
-      timeline.appendChild(segEl);
+    const tlList = document.createElement("div");
+    tlList.className = "g-tl-list";
+    result.timelineRows.forEach(function (row) {
+      const rowEl = document.createElement("div");
+      rowEl.className = "g-tl-row";
+
+      const num = document.createElement("div");
+      num.className = "g-tl-num";
+      num.textContent = row.gn;
+
+      const name = document.createElement("div");
+      name.className = "g-tl-name";
+      name.textContent = row.name;
+
+      const track = document.createElement("div");
+      track.className = "g-tl-track";
+      const fill = document.createElement("div");
+      fill.className = "g-tl-fill " + row.cls;
+      fill.style.left = (row.start / result.timelineTotal * 100) + "%";
+      fill.style.width = Math.max((row.end - row.start) / result.timelineTotal * 100, 1.5) + "%";
+      track.appendChild(fill);
+
+      const meta = document.createElement("div");
+      meta.className = "g-tl-meta";
+      let dateText;
+      if (row.hasTarget === false) dateText = row.dateLabel ? ("as of " + row.dateLabel) : "—";
+      else if (row.reached === false) dateText = "not reached";
+      else dateText = row.dateLabel || "—";
+      meta.textContent = row.monthCount + " mo" + (row.monthCount === 1 ? "" : "s") + " · " + dateText;
+
+      rowEl.appendChild(num);
+      rowEl.appendChild(name);
+      rowEl.appendChild(track);
+      rowEl.appendChild(meta);
+      tlList.appendChild(rowEl);
     });
-    resultArea.appendChild(timeline);
+    resultArea.appendChild(tlList);
 
     if (result.showLoans) {
       resultArea.appendChild(buildGoalsPhaseBlock({
