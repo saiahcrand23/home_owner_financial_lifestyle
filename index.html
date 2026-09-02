@@ -177,6 +177,7 @@
     font-size: 0.85rem;
   }
   .radio-toggle button.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 0.83rem; margin-top: 8px; }
   th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--border); }
   th:first-child, td:first-child { text-align: left; }
@@ -218,6 +219,22 @@
   .subcard { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: var(--bg); }
   .subcard-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .subcard-header .title { font-size: 0.85rem; font-weight: 600; flex: 1; }
+  .month-picker { display: flex; flex-wrap: wrap; gap: 4px; }
+  .month-picker button {
+    flex: 0 0 auto; min-width: 40px; padding: 4px 7px; font-size: 0.75rem;
+    background: var(--bg); color: var(--text-dim); border: 1px solid var(--border);
+    border-radius: 6px; cursor: pointer;
+  }
+  .month-picker button.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .alloc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .bill-row { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--bg); }
+  .bill-row .field { margin-bottom: 8px; }
+  .bill-row.pinned { opacity: 1; }
+  .ded-row { display: grid; grid-template-columns: 1.4fr 0.9fr 0.9fr 1fr; gap: 8px; align-items: end; margin-bottom: 8px; }
+  .ded-row .ded-name { font-size: 0.82rem; color: var(--text); padding-bottom: 9px; }
+  .ded-row .ded-static { font-size: 0.78rem; color: var(--text-dim); padding-bottom: 9px; }
+  .ded-row .field { margin-bottom: 0; }
+  @media (max-width: 620px) { .ded-row { grid-template-columns: 1fr 1fr; } }
   .empty-msg { font-size: 0.85rem; color: var(--text-dim); text-align: center; padding: 14px 0; }
 
   #g-loans-wrap, #g-emerg-wrap, #g-house-wrap, #g-hysa-wrap { display: none; }
@@ -309,6 +326,7 @@
 <nav class="tabs">
   <button data-tab="goals" class="active">Savings Goals</button>
   <button data-tab="housing">Home Buying</button>
+  <button data-tab="cashflow">Cash Flow</button>
   <button data-tab="surplus">Surplus</button>
   <button data-tab="payoff">House Payoff</button>
   <button data-tab="retirement">Retirement</button>
@@ -544,137 +562,190 @@
   </section>
 
   <!-- ===================== SURPLUS ===================== -->
-  <section class="tabpanel" id="tab-surplus">
-    <h2 class="print-heading">Surplus</h2>
+  <!-- ===================== CASH FLOW ===================== -->
+  <section class="tabpanel" id="tab-cashflow">
+    <h2 class="print-heading">Cash Flow</h2>
     <div class="grid">
 
       <div class="stack">
         <div class="card">
-          <h2>Pay</h2>
+          <h2>Income</h2>
           <div class="field">
             <label>Gross regular pay (monthly $)</label>
-            <input type="number" id="s-grossRegularMonthly" step="100">
-          </div>
-          <div class="checkbox-row">
-            <input type="checkbox" id="s-titheRegular">
-            <label for="s-titheRegular">Tithe 10% of this gross (subtracted last, after tax/HSA/health insurance/retirement)</label>
+            <input type="number" id="cf-grossRegularMonthly" step="100">
           </div>
           <div class="field-row">
             <div class="field">
-              <label id="s-grossBonusLabel">Gross bonus pay ($)</label>
-              <input type="number" id="s-grossBonusAmount" step="100">
+              <label id="cf-grossBonusLabel">Gross bonus pay ($)</label>
+              <input type="number" id="cf-grossBonusAmount" step="100">
             </div>
             <div class="field">
               <label>Frequency</label>
-              <select id="s-bonusFrequency">
+              <select id="cf-bonusFrequency">
                 <option value="monthly">Monthly</option>
                 <option value="quarterly">Quarterly</option>
                 <option value="annually">Annually</option>
               </select>
             </div>
           </div>
-          <div class="checkbox-row">
-            <input type="checkbox" id="s-titheBonus">
-            <label for="s-titheBonus">Tithe 10% of this gross (subtracted last; bonus has no HSA/health insurance deduction)</label>
-          </div>
           <div class="field">
-            <label>Effective tax rate (%)</label>
-            <input type="number" id="s-taxRate" step="0.5">
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label>Monthly HSA contribution ($)</label>
-              <input type="number" id="s-hsaMonthly" step="10">
-            </div>
-            <div class="field">
-              <label>Monthly health insurance ($)</label>
-              <input type="number" id="s-healthInsuranceMonthly" step="10">
-            </div>
+            <label>Bonus lands in</label>
+            <div class="month-picker" id="cf-bonusMonths"></div>
+            <div class="sub">Drives the 12-month calendar below.</div>
           </div>
         </div>
 
         <div class="card">
-          <h2>Total surplus</h2>
-          <div class="stat"><span>Annual</span><span class="val" id="out-surplusAnnual"></span></div>
-          <div class="stat"><span>Quarterly</span><span class="val" id="out-surplusQuarterly"></span></div>
-          <div class="stat total"><span>Monthly</span><span class="val" id="out-surplusMonthly"></span></div>
-          <div class="note">Annual surplus = (net regular pay &times; 12) + (net bonus pay &times; <span id="s-bonusMultiplierNote"></span>) &minus; (budget categories + housing + retirement) &times; 12 &minus; tithe.</div>
-
-          <div class="stat total"><span>Total monthly budget</span><span class="val" id="out-totalMonthlyBudget"></span></div>
-          <div class="note">Budget categories + housing + retirement + tithe on regular pay. Excludes tithe on the quarterly bonus, which isn't a monthly cost.</div>
-
-          <h3>Where it goes (annual)</h3>
-          <div class="stat"><span>Budget categories + housing + retirement</span><span class="val" id="out-deductionsAnnual"></span></div>
-          <div class="stat"><span>Tithe</span><span class="val" id="out-titheAnnual"></span></div>
-          <div class="stat"><span>Taxes</span><span class="val" id="out-taxAnnual"></span></div>
+          <h2>Payroll deductions</h2>
+          <div class="field-row">
+            <div class="field">
+              <label>Tax rate &mdash; regular (%)</label>
+              <input type="number" id="cf-taxRateRegular" step="0.5">
+            </div>
+            <div class="field">
+              <label>Tax rate &mdash; bonus (%)</label>
+              <input type="number" id="cf-taxRateBonus" step="0.5">
+              <div class="sub">Supplemental wages are often withheld at a flat 22%.</div>
+            </div>
+          </div>
+          <div id="cf-deduction-list"></div>
+          <div class="stat"><span>Net regular pay</span><span class="val" id="out-cf-netRegular"></span></div>
+          <div class="stat"><span>Net bonus pay</span><span class="val" id="out-cf-netBonus"></span></div>
+          <div class="note">Gross &minus; pre-tax deductions = taxable; then tax, then post-tax deductions. Percent-based rows are taken on that source&rsquo;s gross.</div>
         </div>
       </div>
 
       <div class="card">
-        <h2>Budget categories</h2>
-        <div id="s-category-list"></div>
-        <button class="btn" id="s-add-category" type="button">+ Add category</button>
-        <div class="field" style="margin-top:16px">
-          <label>Housing (monthly $) &mdash; auto-filled from Home Buying tab</label>
-          <input type="number" id="s-housingOverride" step="10">
-          <div class="sub">Calculated: <span id="s-housingCalculated"></span> &middot; <button class="btn small" id="btn-reset-housing" type="button">Use calculated value</button></div>
+        <h2>Budget</h2>
+        <p class="hint">Enter each bill at its own cadence &mdash; a $1,400 semi-annual premium is 1400, not 233.</p>
+        <div id="cf-bill-list"></div>
+        <button class="btn" id="cf-add-bill" type="button">+ Add bill</button>
+      </div>
+
+      <div class="card full-width">
+        <h2>12-month running balance</h2>
+        <div class="stat total"><span>Bonus reserved for monthly bills</span><span class="val" id="out-cf-bonusReserved"></span></div>
+        <div class="note" id="cf-reserve-note"></div>
+        <div class="stat"><span>Lowest regular-only balance</span><span class="val" id="out-cf-minRegular"></span></div>
+        <div class="stat"><span>Lowest combined balance</span><span class="val" id="out-cf-minCombined"></span></div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Month</th><th>Regular in</th><th>Bonus in</th><th>Regular bills</th><th>Bonus bills</th><th>Regular-only balance</th><th>Combined balance</th></tr>
+            </thead>
+            <tbody id="out-cf-calendar-body"></tbody>
+          </table>
         </div>
-        <div class="field">
-          <label>Retirement (% of gross regular + bonus pay, combined)</label>
-          <input type="number" id="s-retirementPct" step="0.5">
-          <div class="derived" id="s-retirementDollar"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="tabpanel" id="tab-surplus">
+    <h2 class="print-heading">Surplus</h2>
+    <p class="hint">Every input on this tab lives on the Cash Flow tab. This is the summary.</p>
+    <div class="grid">
+
+      <div class="card">
+        <h2>Income</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th></th><th>Regular only</th><th>Bonus-adjusted</th></tr></thead>
+            <tbody>
+              <tr><td>Gross monthly</td><td id="out-inc-grossRegular"></td><td id="out-inc-grossCombined"></td></tr>
+              <tr><td>Net monthly</td><td id="out-inc-netRegular"></td><td id="out-inc-netCombined"></td></tr>
+            </tbody>
+          </table>
         </div>
+        <div class="note">Net is after tax and all payroll deductions. &ldquo;Bonus-adjusted&rdquo; spreads the bonus over 12 months.</div>
+      </div>
+
+      <div class="card">
+        <h2>Monthly budget</h2>
+        <div class="stat"><span>Housing</span><span class="val" id="out-mb-housing"></span></div>
+        <div class="stat"><span>Budgeted bills</span><span class="val" id="out-mb-bills"></span></div>
+        <div class="stat"><span>Retirement</span><span class="val" id="out-mb-retirement"></span></div>
+        <div class="stat"><span>Benefits + HSA</span><span class="val" id="out-mb-benefits"></span></div>
+        <div class="stat"><span>Tithe</span><span class="val" id="out-mb-tithe"></span></div>
+        <div class="stat total"><span>Total monthly budget</span><span class="val" id="out-totalMonthlyBudget"></span></div>
+        <div class="note">Non-monthly bills are spread to a monthly equivalent. Taxes are shown separately below.</div>
+        <h3>Annual</h3>
+        <div class="stat"><span>Bills + retirement + benefits</span><span class="val" id="out-deductionsAnnual"></span></div>
+        <div class="stat"><span>Tithe</span><span class="val" id="out-titheAnnual"></span></div>
+        <div class="stat"><span>Taxes</span><span class="val" id="out-taxAnnual"></span></div>
+      </div>
+
+      <div class="card">
+        <h2>Surplus</h2>
+        <div class="stat"><span>Annual</span><span class="val" id="out-surplusAnnual"></span></div>
+        <div class="stat"><span>Quarterly</span><span class="val" id="out-surplusQuarterly"></span></div>
+        <div class="stat total"><span>Monthly</span><span class="val" id="out-surplusMonthly"></span></div>
+        <h3>By source</h3>
+        <div class="stat"><span>Regular pay surplus / month</span><span class="val" id="out-regularSurplusMonthly"></span></div>
+        <div class="stat"><span>Bonus leftover / year</span><span class="val" id="out-bonusLeftoverAnnual"></span></div>
+        <div class="note" id="out-regularSurplusNote"></div>
       </div>
 
       <div class="card full-width">
         <h2>Allocate the surplus</h2>
-        <p class="hint">Split between discretionary (vacation/fun), savings, kids' future, and house payoff.</p>
-        <div class="radio-toggle">
-          <button data-split="percent" id="split-percent">Percentage</button>
-          <button data-split="dollar" id="split-dollar">Dollar amount / year</button>
+        <p class="hint">Regular pay and bonus pay are allocated separately. House payoff is the auto-set remainder in both.</p>
+        <div class="alloc-grid">
+
+          <div class="subcard">
+            <div class="subcard-header"><span class="title">From regular pay (monthly)</span><span class="val" id="out-alloc-regularPool"></span></div>
+            <div class="radio-toggle">
+              <button data-alloc="regular" data-mode="percent" id="alloc-regular-percent">Percentage</button>
+              <button data-alloc="regular" data-mode="dollar" id="alloc-regular-dollar">Dollar amount / month</button>
+            </div>
+            <div id="alloc-regular-percent-fields">
+              <div class="field"><label>Discretionary %</label><input type="number" id="ar-discretionaryPct" step="5" min="0" max="100"></div>
+              <div class="field"><label>Savings %</label><input type="number" id="ar-savingsPct" step="5" min="0" max="100"></div>
+              <div class="field"><label>Kids&rsquo; future %</label><input type="number" id="ar-kidsFuturePct" step="5" min="0" max="100"></div>
+              <div class="field"><label>House payoff %</label><input type="number" id="ar-payoffPct" step="5" disabled><div class="sub">Auto-set to the remainder</div></div>
+            </div>
+            <div id="alloc-regular-dollar-fields">
+              <div class="field"><label>Discretionary $ / month</label><input type="number" id="ar-discretionaryDollar" step="25"></div>
+              <div class="field"><label>Savings $ / month</label><input type="number" id="ar-savingsDollar" step="25"></div>
+              <div class="field"><label>Kids&rsquo; future $ / month</label><input type="number" id="ar-kidsFutureDollar" step="25"></div>
+              <div class="field"><label>House payoff $ / month</label><input type="number" id="ar-payoffDollar" step="25" disabled><div class="sub">Auto-set to the remainder</div></div>
+            </div>
+            <div class="stat"><span>Discretionary</span><span class="val" id="out-ar-discretionary"></span></div>
+            <div class="stat"><span>Savings</span><span class="val" id="out-ar-savings"></span></div>
+            <div class="stat"><span>Kids&rsquo; future</span><span class="val" id="out-ar-kidsFuture"></span></div>
+            <div class="stat"><span>House payoff</span><span class="val" id="out-ar-payoff"></span></div>
+          </div>
+
+          <div class="subcard">
+            <div class="subcard-header"><span class="title">From bonus (annual)</span><span class="val" id="out-alloc-bonusPool"></span></div>
+            <div class="radio-toggle">
+              <button data-alloc="bonus" data-mode="percent" id="alloc-bonus-percent">Percentage</button>
+              <button data-alloc="bonus" data-mode="dollar" id="alloc-bonus-dollar">Dollar amount / year</button>
+            </div>
+            <div id="alloc-bonus-percent-fields">
+              <div class="field"><label>Discretionary %</label><input type="number" id="ab-discretionaryPct" step="5" min="0" max="100"></div>
+              <div class="field"><label>Savings %</label><input type="number" id="ab-savingsPct" step="5" min="0" max="100"></div>
+              <div class="field"><label>Kids&rsquo; future %</label><input type="number" id="ab-kidsFuturePct" step="5" min="0" max="100"></div>
+              <div class="field"><label>House payoff %</label><input type="number" id="ab-payoffPct" step="5" disabled><div class="sub">Auto-set to the remainder</div></div>
+            </div>
+            <div id="alloc-bonus-dollar-fields">
+              <div class="field"><label>Discretionary $ / year</label><input type="number" id="ab-discretionaryDollar" step="500"></div>
+              <div class="field"><label>Savings $ / year</label><input type="number" id="ab-savingsDollar" step="500"></div>
+              <div class="field"><label>Kids&rsquo; future $ / year</label><input type="number" id="ab-kidsFutureDollar" step="500"></div>
+              <div class="field"><label>House payoff $ / year</label><input type="number" id="ab-payoffDollar" step="500" disabled><div class="sub">Auto-set to the remainder</div></div>
+            </div>
+            <div class="stat"><span>Discretionary</span><span class="val" id="out-ab-discretionary"></span></div>
+            <div class="stat"><span>Savings</span><span class="val" id="out-ab-savings"></span></div>
+            <div class="stat"><span>Kids&rsquo; future</span><span class="val" id="out-ab-kidsFuture"></span></div>
+            <div class="stat"><span>House payoff</span><span class="val" id="out-ab-payoff"></span></div>
+          </div>
+
         </div>
-        <div id="split-percent-fields">
-          <div class="field">
-            <label>Discretionary (vacation/fun) %</label>
-            <input type="number" id="s-vacationPct" step="5" min="0" max="100">
-          </div>
-          <div class="field">
-            <label>Savings %</label>
-            <input type="number" id="s-savingsPct" step="5" min="0" max="100">
-          </div>
-          <div class="field">
-            <label>Kids' future %</label>
-            <input type="number" id="s-kidsFuturePct" step="5" min="0" max="100">
-          </div>
-          <div class="field">
-            <label>House payoff %</label>
-            <input type="number" id="s-payoffPct" step="5" min="0" max="100" disabled>
-            <div class="sub">Auto-set to the remainder</div>
-          </div>
-        </div>
-        <div id="split-dollar-fields" style="display:none">
-          <div class="field">
-            <label>Discretionary (vacation/fun) $ / year</label>
-            <input type="number" id="s-vacationDollar" step="500">
-          </div>
-          <div class="field">
-            <label>Savings $ / year</label>
-            <input type="number" id="s-savingsDollar" step="500">
-          </div>
-          <div class="field">
-            <label>Kids' future $ / year</label>
-            <input type="number" id="s-kidsFutureDollar" step="500">
-          </div>
-          <div class="field">
-            <label>House payoff $ / year</label>
-            <input type="number" id="s-payoffDollar" step="500" disabled>
-            <div class="sub">Auto-set to the remainder (total surplus minus discretionary, savings, and kids' future)</div>
-          </div>
-        </div>
+        <h3>Combined (annual)</h3>
         <div class="stat"><span>Discretionary / year</span><span class="val" id="out-vacationAnnual"></span></div>
         <div class="stat"><span>Savings / year</span><span class="val" id="out-savingsAnnual"></span></div>
-        <div class="stat"><span>Kids' future / year</span><span class="val" id="out-kidsFutureAnnual"></span></div>
+        <div class="stat"><span>Kids&rsquo; future / year</span><span class="val" id="out-kidsFutureAnnual"></span></div>
         <div class="stat"><span>House payoff / year</span><span class="val" id="out-payoffAnnual"></span></div>
+        <div class="note">House Payoff and Kids&rsquo; Future read these combined totals.</div>
       </div>
 
     </div>
@@ -945,31 +1016,43 @@
         other: 0
       }
     },
-    surplus: {
+    cashflow: {
       grossRegularMonthly: 7083,
-      titheRegular: false,
       grossBonusAmount: 500,
       bonusFrequency: "quarterly",
-      titheBonus: false,
-      taxRate: 20.0,
-      hsaMonthly: 0,
-      healthInsuranceMonthly: 180,
-      categoryId: 2,
-      categories: [
-        { id: 1, name: "Needs", amount: 2400 },
-        { id: 2, name: "Wants", amount: 400 }
+      bonusMonths: [3, 6, 9, 12],
+      taxRateRegular: 20.0,
+      taxRateBonus: 20.0,
+      // Fixed set of payroll deductions. Keyed (not an array) so adding a row
+      // later deep-merges into saved state instead of replacing it wholesale.
+      deductions: {
+        benefits: { amount: 180, type: "dollar", taxTreatment: "pre", appliesTo: "regular" },
+        hsa: { amount: 0, type: "dollar", taxTreatment: "pre", appliesTo: "regular" },
+        retTrad: { amount: 7, type: "percent", taxTreatment: "pre", appliesTo: "both" },
+        retRoth: { amount: 0, type: "percent", taxTreatment: "post", appliesTo: "both" },
+        tithe: { amount: 10, type: "percent", taxTreatment: "post", appliesTo: "both" }
+      },
+      billId: 2,
+      bills: [
+        { id: 1, name: "Needs", amount: 2400, cadence: "monthly", fundedBy: "regular", dueMonths: [] },
+        { id: 2, name: "Wants", amount: 400, cadence: "monthly", fundedBy: "regular", dueMonths: [] }
       ],
       housingOverride: null,
-      housingOverrideActive: false,
-      retirementPct: 7,
-      splitMode: "dollar",
-      vacationPct: 50,
-      savingsPct: 0,
-      kidsFuturePct: 0,
-      payoffPct: 50,
-      vacationDollar: 1500,
-      savingsDollar: 0,
-      kidsFutureDollar: 0
+      housingOverrideActive: false
+    },
+    surplus: {
+      allocation: {
+        regular: {
+          mode: "percent",
+          discretionaryPct: 100, savingsPct: 0, kidsFuturePct: 0, payoffPct: 0,
+          discretionaryDollar: 0, savingsDollar: 0, kidsFutureDollar: 0
+        },
+        bonus: {
+          mode: "dollar",
+          discretionaryPct: 50, savingsPct: 0, kidsFuturePct: 0, payoffPct: 50,
+          discretionaryDollar: 1500, savingsDollar: 0, kidsFutureDollar: 0
+        }
+      }
     },
     payoff: {
       extraByYear: { "2": 2000, "3": 2500, "4": 2200 }
@@ -1046,6 +1129,65 @@
     (target.kids.children || []).forEach(function (child) { delete child.brokerage; });
   }
 
+  // Pre-dates the Cash Flow tab: everything used to live on state.surplus as a
+  // flat monthly figure with tax applied before retirement was subtracted.
+  // Rehome those inputs onto state.cashflow, giving each bill a cadence and a
+  // funding source, and each deduction a tax treatment.
+  function migrateLegacyToCashFlow(target, source) {
+    if (!source || !source.surplus || source.cashflow !== undefined) return;
+    const old = target.surplus;
+    const c = target.cashflow;
+    if (old.grossRegularMonthly !== undefined) c.grossRegularMonthly = old.grossRegularMonthly;
+    if (old.grossBonusAmount !== undefined) c.grossBonusAmount = old.grossBonusAmount;
+    if (old.bonusFrequency !== undefined) c.bonusFrequency = old.bonusFrequency;
+    if (old.taxRate !== undefined) {
+      c.taxRateRegular = old.taxRate;
+      c.taxRateBonus = old.taxRate;
+    }
+    if (old.healthInsuranceMonthly !== undefined) c.deductions.benefits.amount = old.healthInsuranceMonthly;
+    if (old.hsaMonthly !== undefined) c.deductions.hsa.amount = old.hsaMonthly;
+    if (old.retirementPct !== undefined) c.deductions.retTrad.amount = old.retirementPct;
+    // Two independent tithe checkboxes collapse into one rate plus an
+    // applies-to; unchecked on both sides means a 0% rate, not "regular".
+    if (old.titheRegular !== undefined || old.titheBonus !== undefined) {
+      const tr = !!old.titheRegular, tb = !!old.titheBonus;
+      c.deductions.tithe.amount = (tr || tb) ? 10 : 0;
+      c.deductions.tithe.appliesTo = (tr && tb) ? "both" : (tb ? "bonus" : "regular");
+    }
+    if (Array.isArray(old.categories)) {
+      c.bills = old.categories.map(function (cat) {
+        return {
+          id: cat.id, name: cat.name, amount: Number(cat.amount) || 0,
+          cadence: "monthly", fundedBy: "regular", dueMonths: []
+        };
+      });
+      c.billId = old.categoryId || c.bills.length;
+    }
+    if (old.housingOverride !== undefined) c.housingOverride = old.housingOverride;
+    if (old.housingOverrideActive !== undefined) c.housingOverrideActive = old.housingOverrideActive;
+
+    // The old allocation was denominated annually over the combined surplus,
+    // so it maps onto the bonus block. Regular defaults to 100% discretionary
+    // (float), matching the intent behind splitting the two apart.
+    const b = target.surplus.allocation.bonus;
+    if (old.splitMode !== undefined) b.mode = old.splitMode;
+    if (old.vacationPct !== undefined) b.discretionaryPct = old.vacationPct;
+    if (old.savingsPct !== undefined) b.savingsPct = old.savingsPct;
+    if (old.kidsFuturePct !== undefined) b.kidsFuturePct = old.kidsFuturePct;
+    if (old.payoffPct !== undefined) b.payoffPct = old.payoffPct;
+    if (old.vacationDollar !== undefined) b.discretionaryDollar = old.vacationDollar;
+    if (old.savingsDollar !== undefined) b.savingsDollar = old.savingsDollar;
+    if (old.kidsFutureDollar !== undefined) b.kidsFutureDollar = old.kidsFutureDollar;
+
+    ["grossRegularMonthly", "titheRegular", "grossBonusAmount", "bonusFrequency", "titheBonus",
+      "taxRate", "hsaMonthly", "healthInsuranceMonthly", "categoryId", "categories",
+      "housingOverride", "housingOverrideActive", "retirementPct", "splitMode",
+      "vacationPct", "savingsPct", "kidsFuturePct", "payoffPct",
+      "vacationDollar", "savingsDollar", "kidsFutureDollar"].forEach(function (k) {
+        delete target.surplus[k];
+      });
+  }
+
   function loadState() {
     let saved = null;
     try {
@@ -1056,6 +1198,7 @@
     migrateLegacyCategories(state, saved);
     migrateLegacyBonusFrequency(state, saved);
     migrateLegacyBrokerage(state);
+    migrateLegacyToCashFlow(state, saved);
     if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
   }
 
@@ -1400,7 +1543,10 @@
   // ---------------------------------------------------------------------
   // Calculation engine
   // ---------------------------------------------------------------------
-  function buildAmortization(principal, annualRatePct, termYears, monthlyPI, extraByYear, downPaymentPct, homePrice) {
+  // extraByYear lands as a lump on day one of each year (bonus money genuinely
+  // arrives that way); monthlyExtra is applied inside the month loop, so steady
+  // payments aren't credited with a full year of interest they never saved.
+  function buildAmortization(principal, annualRatePct, termYears, monthlyPI, extraByYear, downPaymentPct, homePrice, monthlyExtra) {
     const monthlyRate = annualRatePct / 100 / 12;
     let balance = principal;
     const schedule = [];
@@ -1413,7 +1559,7 @@
       let yearPrincipal = extra;
       for (let m = 0; m < 12 && balance > 0.005; m++) {
         const interest = balance * monthlyRate;
-        let principalPaid = monthlyPI - interest;
+        let principalPaid = monthlyPI - interest + (monthlyExtra || 0);
         if (principalPaid > balance) principalPaid = balance;
         if (principalPaid < 0) principalPaid = 0;
         balance -= principalPaid;
@@ -1485,60 +1631,204 @@
   const BONUS_FREQ_PER_YEAR = { monthly: 12, quarterly: 4, annually: 1 };
   const BONUS_FREQ_LABELS = { monthly: "monthly", quarterly: "quarterly", annually: "annual" };
 
-  function computeSurplus() {
-    const s = state.surplus;
-    const housing = computeHousing();
-    const housingCost = s.housingOverrideActive && s.housingOverride !== null && s.housingOverride !== ""
-      ? Number(s.housingOverride)
-      : housing.totalMonthly;
+  const CADENCE_PER_YEAR = { monthly: 12, quarterly: 4, semiannual: 2, annual: 1 };
+  const CADENCE_LABELS = { monthly: "Monthly", quarterly: "Quarterly", semiannual: "Semi-annual", annual: "Annual" };
+  // Where a non-monthly bill lands when no due month has been picked.
+  const DEFAULT_DUE_MONTHS = { monthly: [1,2,3,4,5,6,7,8,9,10,11,12], quarterly: [1,4,7,10], semiannual: [1,7], annual: [1] };
+  const DEDUCTION_ORDER = ["benefits", "hsa", "retTrad", "retRoth", "tithe"];
+  const DEDUCTION_LABELS = {
+    benefits: "Benefits premiums", hsa: "HSA",
+    retTrad: "Retirement (traditional)", retRoth: "Retirement (Roth)", tithe: "Tithe"
+  };
+  const MONTH_LABELS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-    const taxRate = s.taxRate / 100;
-    const taxableRegular = s.grossRegularMonthly - s.hsaMonthly - s.healthInsuranceMonthly;
-    const taxRegularMonthly = taxableRegular * taxRate;
-    const netRegularPretithe = taxableRegular - taxRegularMonthly;
+  function deductionApplies(d, source) {
+    return d.appliesTo === "both" || d.appliesTo === source;
+  }
+  // Percent deductions are taken on that source's gross (tithe included —
+  // confirmed as a gross tithe, matching the pre-Cash-Flow behaviour).
+  function deductionAmount(d, gross) {
+    return d.type === "percent" ? gross * ((Number(d.amount) || 0) / 100) : (Number(d.amount) || 0);
+  }
 
-    const bonusPerYear = BONUS_FREQ_PER_YEAR[s.bonusFrequency] || 4;
-    const taxableBonus = s.grossBonusAmount;
-    const taxBonusPerOccurrence = taxableBonus * taxRate;
-    const netBonusPretithe = taxableBonus - taxBonusPerOccurrence;
+  // The housing row is pinned to the top of the bill list and mirrors the Home
+  // Buying tab unless overridden, so it is built here rather than stored.
+  function housingBill() {
+    const c = state.cashflow;
+    const calculated = computeHousing().totalMonthly;
+    const amount = c.housingOverrideActive && c.housingOverride !== null && c.housingOverride !== ""
+      ? Number(c.housingOverride) : calculated;
+    return { id: "housing", name: "Housing", amount: amount, cadence: "monthly", fundedBy: "regular", dueMonths: [], pinned: true, calculated: calculated };
+  }
 
-    const grossMonthlyCombined = s.grossRegularMonthly + (s.grossBonusAmount * bonusPerYear) / 12;
-    const retirementDollar = grossMonthlyCombined * (s.retirementPct / 100);
+  function allBills() {
+    return [housingBill()].concat(state.cashflow.bills || []);
+  }
 
-    const categoriesTotal = s.categories.reduce(function (sum, c) { return sum + (Number(c.amount) || 0); }, 0);
+  function billAnnual(b) {
+    return (Number(b.amount) || 0) * (CADENCE_PER_YEAR[b.cadence] || 12);
+  }
 
-    const annualPretithe = netRegularPretithe * 12 + netBonusPretithe * bonusPerYear;
-    const annualDeductions = (categoriesTotal + housingCost + retirementDollar) * 12;
-    const titheRegularMonthly = s.titheRegular ? s.grossRegularMonthly * 0.10 : 0;
-    const titheAnnual = titheRegularMonthly * 12 +
-      (s.titheBonus ? s.grossBonusAmount * bonusPerYear * 0.10 : 0);
-    const taxAnnual = taxRegularMonthly * 12 + taxBonusPerOccurrence * bonusPerYear;
+  function billDueMonths(b) {
+    const picked = (b.dueMonths || []).filter(function (m) { return m >= 1 && m <= 12; });
+    if (picked.length) return picked.slice().sort(function (a, x) { return a - x; });
+    return DEFAULT_DUE_MONTHS[b.cadence] || DEFAULT_DUE_MONTHS.monthly;
+  }
 
-    const annualSurplus = annualPretithe - annualDeductions - titheAnnual;
-    const quarterlySurplus = annualSurplus / 4;
-    const monthlySurplus = annualSurplus / 12;
+  // Gross -> pre-tax deductions -> tax -> post-tax deductions -> net.
+  // Retirement used to be subtracted after tax had already been computed on the
+  // full gross, so pre-tax contributions got no tax benefit at all.
+  function netForSource(gross, taxRatePct, source) {
+    const d = state.cashflow.deductions;
+    let pre = 0, post = 0;
+    DEDUCTION_ORDER.forEach(function (key) {
+      const row = d[key];
+      if (!row || !deductionApplies(row, source)) return;
+      const amt = deductionAmount(row, gross);
+      if (row.taxTreatment === "pre") pre += amt; else post += amt;
+    });
+    const taxable = Math.max(gross - pre, 0);
+    const tax = taxable * ((Number(taxRatePct) || 0) / 100);
+    return { gross: gross, pre: pre, post: post, taxable: taxable, tax: tax, net: taxable - tax - post };
+  }
 
-    let vacationAnnual, savingsAnnual, kidsFutureAnnual, payoffAnnual;
-    if (s.splitMode === "percent") {
-      vacationAnnual = annualSurplus * (s.vacationPct / 100);
-      savingsAnnual = annualSurplus * (s.savingsPct / 100);
-      kidsFutureAnnual = annualSurplus * (s.kidsFuturePct / 100);
-      payoffAnnual = annualSurplus * (s.payoffPct / 100);
-    } else {
-      vacationAnnual = s.vacationDollar;
-      savingsAnnual = s.savingsDollar;
-      kidsFutureAnnual = s.kidsFutureDollar;
-      payoffAnnual = annualSurplus - s.vacationDollar - s.savingsDollar - s.kidsFutureDollar;
+  function computeCashFlow() {
+    const c = state.cashflow;
+    const bonusPerYear = BONUS_FREQ_PER_YEAR[c.bonusFrequency] || 4;
+
+    const regular = netForSource(c.grossRegularMonthly, c.taxRateRegular, "regular");
+    const bonus = netForSource(c.grossBonusAmount, c.taxRateBonus, "bonus");
+
+    const bills = allBills();
+    let regularBillsAnnual = 0, bonusBillsAnnual = 0;
+    bills.forEach(function (b) {
+      if (b.fundedBy === "bonus") bonusBillsAnnual += billAnnual(b);
+      else regularBillsAnnual += billAnnual(b);
+    });
+    const billsAnnual = regularBillsAnnual + bonusBillsAnnual;
+
+    const netBonusAnnual = bonus.net * bonusPerYear;
+    const regularSurplusMonthly = regular.net - regularBillsAnnual / 12;
+    const bonusLeftoverAnnual = netBonusAnnual - bonusBillsAnnual;
+
+    const grossMonthlyCombined = c.grossRegularMonthly + (c.grossBonusAmount * bonusPerYear) / 12;
+    const netMonthlyCombined = regular.net + netBonusAnnual / 12;
+
+    // Monthly-equivalent deduction detail for the Surplus dashboard.
+    const d = c.deductions;
+    function monthlyDeduction(key) {
+      const row = d[key];
+      if (!row) return 0;
+      let total = 0;
+      if (deductionApplies(row, "regular")) total += deductionAmount(row, c.grossRegularMonthly);
+      if (deductionApplies(row, "bonus")) total += deductionAmount(row, c.grossBonusAmount) * bonusPerYear / 12;
+      return total;
     }
-
-    const totalMonthlyBudget = categoriesTotal + housingCost + retirementDollar + titheRegularMonthly;
+    const titheMonthly = monthlyDeduction("tithe");
+    const retirementDollar = monthlyDeduction("retTrad") + monthlyDeduction("retRoth");
+    const benefitsMonthly = monthlyDeduction("benefits") + monthlyDeduction("hsa");
+    const taxAnnual = regular.tax * 12 + bonus.tax * bonusPerYear;
 
     return {
-      housingCost: housingCost, retirementDollar: retirementDollar, grossMonthlyCombined: grossMonthlyCombined,
-      categoriesTotal: categoriesTotal, totalMonthlyBudget: totalMonthlyBudget,
-      annualSurplus: annualSurplus, quarterlySurplus: quarterlySurplus, monthlySurplus: monthlySurplus,
-      vacationAnnual: vacationAnnual, savingsAnnual: savingsAnnual, kidsFutureAnnual: kidsFutureAnnual, payoffAnnual: payoffAnnual,
-      annualDeductions: annualDeductions, titheAnnual: titheAnnual, taxAnnual: taxAnnual
+      bonusPerYear: bonusPerYear, regular: regular, bonus: bonus, bills: bills,
+      regularBillsAnnual: regularBillsAnnual, bonusBillsAnnual: bonusBillsAnnual, billsAnnual: billsAnnual,
+      netBonusAnnual: netBonusAnnual, regularSurplusMonthly: regularSurplusMonthly,
+      bonusLeftoverAnnual: bonusLeftoverAnnual,
+      grossMonthlyCombined: grossMonthlyCombined, netMonthlyCombined: netMonthlyCombined,
+      titheMonthly: titheMonthly, retirementDollar: retirementDollar, benefitsMonthly: benefitsMonthly,
+      taxAnnual: taxAnnual, housingCost: bills[0].amount
+    };
+  }
+
+  // Twelve-month running balance. The regular-only line ignores bonus income
+  // entirely; how far it dips below zero is exactly the amount of bonus money
+  // that has to be held back to cover ordinary bills.
+  function computeCashFlowCalendar() {
+    const cf = computeCashFlow();
+    const bonusMonths = (state.cashflow.bonusMonths || []).filter(function (m) { return m >= 1 && m <= 12; });
+    const months = [];
+    let regularBal = 0, combinedBal = 0;
+    for (let m = 1; m <= 12; m++) {
+      let regularOut = 0, bonusOut = 0;
+      cf.bills.forEach(function (b) {
+        if (billDueMonths(b).indexOf(m) === -1) return;
+        const perHit = (Number(b.amount) || 0);
+        if (b.fundedBy === "bonus") bonusOut += perHit; else regularOut += perHit;
+      });
+      const bonusIn = bonusMonths.indexOf(m) !== -1 ? cf.bonus.net : 0;
+      regularBal += cf.regular.net - regularOut;
+      combinedBal += cf.regular.net + bonusIn - regularOut - bonusOut;
+      months.push({
+        month: m, label: MONTH_LABELS[m - 1],
+        regularIn: cf.regular.net, bonusIn: bonusIn,
+        regularOut: regularOut, bonusOut: bonusOut,
+        regularBalance: regularBal, combinedBalance: combinedBal
+      });
+    }
+    const worstRegular = months.reduce(function (lo, x) { return Math.min(lo, x.regularBalance); }, Infinity);
+    const worstCombined = months.reduce(function (lo, x) { return Math.min(lo, x.combinedBalance); }, Infinity);
+    return {
+      months: months,
+      bonusReserved: Math.max(0, -worstRegular),
+      minRegularBalance: worstRegular,
+      minCombinedBalance: worstCombined,
+      negativeMonths: months.filter(function (x) { return x.regularBalance < 0; }).map(function (x) { return x.label; })
+    };
+  }
+
+  // Splits one pool across the four destinations. House payoff is always the
+  // auto-set remainder, as it was before the regular/bonus split.
+  function allocatePool(block, pool) {
+    let discretionary, savings, kidsFuture;
+    if (block.mode === "percent") {
+      discretionary = pool * ((block.discretionaryPct || 0) / 100);
+      savings = pool * ((block.savingsPct || 0) / 100);
+      kidsFuture = pool * ((block.kidsFuturePct || 0) / 100);
+    } else {
+      discretionary = Number(block.discretionaryDollar) || 0;
+      savings = Number(block.savingsDollar) || 0;
+      kidsFuture = Number(block.kidsFutureDollar) || 0;
+    }
+    return {
+      pool: pool, discretionary: discretionary, savings: savings, kidsFuture: kidsFuture,
+      payoff: pool - discretionary - savings - kidsFuture
+    };
+  }
+
+  function computeSurplus() {
+    const cf = computeCashFlow();
+    const a = state.surplus.allocation;
+
+    const annualSurplus = cf.regularSurplusMonthly * 12 + cf.bonusLeftoverAnnual;
+
+    // Regular block is denominated monthly, bonus block annually.
+    const regularAlloc = allocatePool(a.regular, cf.regularSurplusMonthly);
+    const bonusAlloc = allocatePool(a.bonus, cf.bonusLeftoverAnnual);
+
+    // Downstream tabs (House Payoff, Kids' Future) read these combined annual
+    // totals, so they keep working untouched across the split.
+    const vacationAnnual = regularAlloc.discretionary * 12 + bonusAlloc.discretionary;
+    const savingsAnnual = regularAlloc.savings * 12 + bonusAlloc.savings;
+    const kidsFutureAnnual = regularAlloc.kidsFuture * 12 + bonusAlloc.kidsFuture;
+    const payoffAnnual = regularAlloc.payoff * 12 + bonusAlloc.payoff;
+
+    const totalMonthlyBudget = cf.billsAnnual / 12 + cf.retirementDollar + cf.titheMonthly + cf.benefitsMonthly;
+
+    return {
+      cf: cf,
+      housingCost: cf.housingCost, retirementDollar: cf.retirementDollar,
+      grossMonthlyCombined: cf.grossMonthlyCombined, netMonthlyCombined: cf.netMonthlyCombined,
+      categoriesTotal: cf.billsAnnual / 12 - cf.housingCost,
+      totalMonthlyBudget: totalMonthlyBudget,
+      annualSurplus: annualSurplus, quarterlySurplus: annualSurplus / 4, monthlySurplus: annualSurplus / 12,
+      regularSurplusMonthly: cf.regularSurplusMonthly, bonusLeftoverAnnual: cf.bonusLeftoverAnnual,
+      regularAlloc: regularAlloc, bonusAlloc: bonusAlloc,
+      vacationAnnual: vacationAnnual, savingsAnnual: savingsAnnual,
+      kidsFutureAnnual: kidsFutureAnnual, payoffAnnual: payoffAnnual,
+      // Payoff needs the steady and lumpy halves kept apart for amortization.
+      payoffMonthlyRegular: regularAlloc.payoff, payoffAnnualBonus: bonusAlloc.payoff,
+      annualDeductions: cf.billsAnnual + (cf.retirementDollar + cf.benefitsMonthly) * 12,
+      titheAnnual: cf.titheMonthly * 12, taxAnnual: cf.taxAnnual
     };
   }
 
@@ -1547,12 +1837,14 @@
     const surplus = computeSurplus();
     const h = state.housing;
     const recurringAnnual = Math.max(surplus.payoffAnnual, 0);
+    const monthlyExtra = Math.max(surplus.payoffMonthlyRegular, 0);
+    const bonusLump = Math.max(surplus.payoffAnnualBonus, 0);
     const extraByYear = {};
     for (let year = 1; year <= h.termYears; year++) {
       const manual = Number(state.payoff.extraByYear[year] || 0);
-      extraByYear[year] = recurringAnnual + manual;
+      extraByYear[year] = bonusLump + manual;
     }
-    const schedule = buildAmortization(housing.loanAmount, h.interestRate, h.termYears, housing.pi, extraByYear, h.downPaymentPct, h.homePrice);
+    const schedule = buildAmortization(housing.loanAmount, h.interestRate, h.termYears, housing.pi, extraByYear, h.downPaymentPct, h.homePrice, monthlyExtra);
     const payoffYear = schedule.length;
     const totalInterestNew = schedule.reduce(function (sum, r) { return sum + r.interestPaid; }, 0);
     const totalInterestOriginal = housing.schedule.reduce(function (sum, r) { return sum + r.interestPaid; }, 0);
@@ -1575,7 +1867,9 @@
     const r = state.retirement;
     const surplus = computeSurplus();
     const retirementDollarMonthly = surplus.retirementDollar;
-    const matchablePct = Math.min(state.surplus.retirementPct, r.employerMatchCapPct);
+    const deferralPct = (Number(state.cashflow.deductions.retTrad.amount) || 0) +
+      (Number(state.cashflow.deductions.retRoth.amount) || 0);
+    const matchablePct = Math.min(deferralPct, r.employerMatchCapPct);
     const employerMatchMonthly = surplus.grossMonthlyCombined * (matchablePct / 100) * (r.employerMatchRatePct / 100);
     const totalMonthlyContribution = retirementDollarMonthly + employerMatchMonthly;
     const months = Math.max((r.retirementAge - r.currentAge) * 12, 0);
@@ -1902,68 +2196,57 @@
     bindNumber("u-utilityDeposits", function () { return state.housing.upfront.utilityDeposits; }, function (v) { state.housing.upfront.utilityDeposits = v; });
     bindNumber("u-other", function () { return state.housing.upfront.other; }, function (v) { state.housing.upfront.other = v; });
 
-    bindNumber("s-grossRegularMonthly", function () { return state.surplus.grossRegularMonthly; }, function (v) { state.surplus.grossRegularMonthly = v; });
-    bindCheckbox("s-titheRegular", function () { return state.surplus.titheRegular; }, function (v) { state.surplus.titheRegular = v; });
-    bindNumber("s-grossBonusAmount", function () { return state.surplus.grossBonusAmount; }, function (v) { state.surplus.grossBonusAmount = v; });
-    document.getElementById("s-bonusFrequency").addEventListener("change", function (e) {
-      state.surplus.bonusFrequency = e.target.value;
-      saveState();
-      renderAll();
-    });
-    bindCheckbox("s-titheBonus", function () { return state.surplus.titheBonus; }, function (v) { state.surplus.titheBonus = v; });
-    bindNumber("s-taxRate", function () { return state.surplus.taxRate; }, function (v) { state.surplus.taxRate = v; });
-    bindNumber("s-hsaMonthly", function () { return state.surplus.hsaMonthly; }, function (v) { state.surplus.hsaMonthly = v; });
-    bindNumber("s-healthInsuranceMonthly", function () { return state.surplus.healthInsuranceMonthly; }, function (v) { state.surplus.healthInsuranceMonthly = v; });
-    bindNumber("s-retirementPct", function () { return state.surplus.retirementPct; }, function (v) { state.surplus.retirementPct = v; });
-
-    document.getElementById("s-add-category").addEventListener("click", function () {
-      state.surplus.categoryId += 1;
-      state.surplus.categories.push({ id: state.surplus.categoryId, name: "New category", amount: 0 });
+    bindNumber("cf-grossRegularMonthly", function () { return state.cashflow.grossRegularMonthly; }, function (v) { state.cashflow.grossRegularMonthly = v; });
+    bindNumber("cf-grossBonusAmount", function () { return state.cashflow.grossBonusAmount; }, function (v) { state.cashflow.grossBonusAmount = v; });
+    bindNumber("cf-taxRateRegular", function () { return state.cashflow.taxRateRegular; }, function (v) { state.cashflow.taxRateRegular = v; });
+    bindNumber("cf-taxRateBonus", function () { return state.cashflow.taxRateBonus; }, function (v) { state.cashflow.taxRateBonus = v; });
+    document.getElementById("cf-bonusFrequency").addEventListener("change", function (e) {
+      state.cashflow.bonusFrequency = e.target.value;
       saveState();
       renderAll();
     });
 
-    document.getElementById("s-housingOverride").addEventListener("input", function (e) {
-      state.surplus.housingOverrideActive = true;
-      state.surplus.housingOverride = e.target.value === "" ? 0 : Number(e.target.value);
-      saveState();
-      renderAll();
-    });
-    document.getElementById("btn-reset-housing").addEventListener("click", function () {
-      state.surplus.housingOverrideActive = false;
-      state.surplus.housingOverride = null;
+    document.getElementById("cf-add-bill").addEventListener("click", function () {
+      state.cashflow.billId += 1;
+      state.cashflow.bills.push({
+        id: state.cashflow.billId, name: "New bill", amount: 0,
+        cadence: "monthly", fundedBy: "regular", dueMonths: []
+      });
       saveState();
       renderAll();
     });
 
-    document.getElementById("split-percent").addEventListener("click", function () { state.surplus.splitMode = "percent"; saveState(); renderAll(); });
-    document.getElementById("split-dollar").addEventListener("click", function () { state.surplus.splitMode = "dollar"; saveState(); renderAll(); });
+    ["regular", "bonus"].forEach(function (which) {
+      ["percent", "dollar"].forEach(function (mode) {
+        document.getElementById("alloc-" + which + "-" + mode).addEventListener("click", function () {
+          state.surplus.allocation[which].mode = mode;
+          saveState();
+          renderAll();
+        });
+      });
+    });
 
-    function recomputePayoffPct() {
-      const s = state.surplus;
-      s.payoffPct = 100 - s.vacationPct - s.savingsPct - s.kidsFuturePct;
+    // House payoff is the remainder, so the other three drive it.
+    function bindAllocPct(prefix, which, key) {
+      document.getElementById(prefix + "-" + key + "Pct").addEventListener("input", function (e) {
+        const block = state.surplus.allocation[which];
+        block[key + "Pct"] = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+        block.payoffPct = 100 - block.discretionaryPct - block.savingsPct - block.kidsFuturePct;
+        saveState();
+        renderAll();
+      });
     }
-    document.getElementById("s-vacationPct").addEventListener("input", function (e) {
-      state.surplus.vacationPct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-      recomputePayoffPct();
-      saveState();
-      renderAll();
+    function bindAllocDollar(prefix, which, key) {
+      bindNumber(prefix + "-" + key + "Dollar",
+        function () { return state.surplus.allocation[which][key + "Dollar"]; },
+        function (v) { state.surplus.allocation[which][key + "Dollar"] = v; });
+    }
+    [["ar", "regular"], ["ab", "bonus"]].forEach(function (pair) {
+      ["discretionary", "savings", "kidsFuture"].forEach(function (key) {
+        bindAllocPct(pair[0], pair[1], key);
+        bindAllocDollar(pair[0], pair[1], key);
+      });
     });
-    document.getElementById("s-savingsPct").addEventListener("input", function (e) {
-      state.surplus.savingsPct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-      recomputePayoffPct();
-      saveState();
-      renderAll();
-    });
-    document.getElementById("s-kidsFuturePct").addEventListener("input", function (e) {
-      state.surplus.kidsFuturePct = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-      recomputePayoffPct();
-      saveState();
-      renderAll();
-    });
-    bindNumber("s-vacationDollar", function () { return state.surplus.vacationDollar; }, function (v) { state.surplus.vacationDollar = v; });
-    bindNumber("s-savingsDollar", function () { return state.surplus.savingsDollar; }, function (v) { state.surplus.savingsDollar = v; });
-    bindNumber("s-kidsFutureDollar", function () { return state.surplus.kidsFutureDollar; }, function (v) { state.surplus.kidsFutureDollar = v; });
 
     bindNumber("r-currentAge", function () { return state.retirement.currentAge; }, function (v) { state.retirement.currentAge = v; });
     bindNumber("r-retirementAge", function () { return state.retirement.retirementAge; }, function (v) { state.retirement.retirementAge = v; });
@@ -2495,104 +2778,279 @@
     });
   }
 
-  function renderSurplusCategoryList() {
-    const categories = state.surplus.categories;
-    const listEl = document.getElementById("s-category-list");
+  function renderDeductionList() {
+    const c = state.cashflow;
+    const listEl = document.getElementById("cf-deduction-list");
     listEl.innerHTML = "";
-    if (!categories.length) {
-      listEl.innerHTML = '<p class="empty-msg">No budget categories added yet</p>';
-      return;
-    }
-    categories.forEach(function (c) {
+    DEDUCTION_ORDER.forEach(function (key) {
+      const d = c.deductions[key];
       const row = document.createElement("div");
-      row.className = "field-row";
-      row.style.alignItems = "flex-end";
-      row.innerHTML =
-        '<div class="field"><label>Name</label><input type="text" class="s-cat-name"></div>' +
-        '<div class="field"><label>Monthly amount ($)</label><input type="number" step="50" min="0" class="s-cat-amt"></div>';
+      row.className = "ded-row";
 
-      const removeBtn = document.createElement("button");
-      removeBtn.className = "btn small danger";
-      removeBtn.type = "button";
-      removeBtn.textContent = "Remove";
-      removeBtn.style.marginBottom = "16px";
-      row.appendChild(removeBtn);
-      removeBtn.addEventListener("click", function () {
-        state.surplus.categories = state.surplus.categories.filter(function (x) { return x.id !== c.id; });
+      const isPercent = d.type === "percent";
+      // Only benefits premiums genuinely vary — HSA and traditional retirement
+      // are always pre-tax, Roth and tithe always post-tax — so the rest show
+      // their treatment as static text instead of an editable control.
+      const treatmentEditable = key === "benefits";
+      row.innerHTML =
+        '<div class="ded-name">' + DEDUCTION_LABELS[key] + '</div>' +
+        '<div class="field"><label>' + (isPercent ? "%" : "$ / month") + '</label>' +
+        '<input type="number" class="ded-amt" step="' + (isPercent ? "0.5" : "10") + '" min="0"></div>' +
+        (treatmentEditable
+          ? '<div class="field"><label>Treatment</label><select class="ded-treatment">' +
+            '<option value="pre">Pre-tax</option><option value="post">Post-tax</option></select></div>'
+          : '<div class="ded-static">' + (d.taxTreatment === "pre" ? "Pre-tax" : "Post-tax") + '</div>') +
+        '<div class="field"><label>Applies to</label><select class="ded-applies">' +
+        '<option value="regular">Regular</option><option value="bonus">Bonus</option><option value="both">Both</option>' +
+        '</select></div>';
+
+      const amt = row.querySelector(".ded-amt");
+      amt.value = d.amount;
+      amt.addEventListener("input", function (e) {
+        d.amount = e.target.value === "" ? 0 : Number(e.target.value);
         saveState();
         renderAll();
       });
 
-      const nameInput = row.querySelector(".s-cat-name");
-      const amtInput = row.querySelector(".s-cat-amt");
-      nameInput.value = c.name;
-      amtInput.value = c.amount;
-      nameInput.addEventListener("input", function (e) { c.name = e.target.value; saveState(); });
-      amtInput.addEventListener("input", function (e) {
-        c.amount = e.target.value;
+      const applies = row.querySelector(".ded-applies");
+      applies.value = d.appliesTo;
+      applies.addEventListener("change", function (e) {
+        d.appliesTo = e.target.value;
         saveState();
-        renderSurplusTotalsOnly();
-        renderPayoff();
-        renderRetirement();
+        renderAll();
       });
+
+      const treatment = row.querySelector(".ded-treatment");
+      if (treatment) {
+        treatment.value = d.taxTreatment;
+        treatment.addEventListener("change", function (e) {
+          d.taxTreatment = e.target.value;
+          saveState();
+          renderAll();
+        });
+      }
 
       listEl.appendChild(row);
     });
   }
 
-  function renderSurplusTotalsOnly() {
-    const out = computeSurplus();
-    document.getElementById("out-surplusAnnual").textContent = fmt$(out.annualSurplus);
-    document.getElementById("out-surplusQuarterly").textContent = fmt$(out.quarterlySurplus);
-    document.getElementById("out-surplusMonthly").textContent = fmt$(out.monthlySurplus);
-    document.getElementById("out-totalMonthlyBudget").textContent = fmt$(out.totalMonthlyBudget);
-    document.getElementById("out-deductionsAnnual").textContent = fmt$(out.annualDeductions);
-    document.getElementById("out-titheAnnual").textContent = fmt$(out.titheAnnual);
-    document.getElementById("out-taxAnnual").textContent = fmt$(out.taxAnnual);
-    document.getElementById("out-vacationAnnual").textContent = fmt$(out.vacationAnnual);
-    document.getElementById("out-savingsAnnual").textContent = fmt$(out.savingsAnnual);
-    document.getElementById("out-kidsFutureAnnual").textContent = fmt$(out.kidsFutureAnnual);
-    document.getElementById("out-payoffAnnual").textContent = fmt$(out.payoffAnnual);
-    document.getElementById("s-payoffPct").value = state.surplus.payoffPct;
-    document.getElementById("s-payoffDollar").value = Math.round(out.payoffAnnual);
+  function renderMonthPicker(container, selected, onToggle) {
+    container.innerHTML = "";
+    MONTH_LABELS.forEach(function (label, i) {
+      const m = i + 1;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = label;
+      if (selected.indexOf(m) !== -1) btn.classList.add("active");
+      btn.addEventListener("click", function () { onToggle(m); });
+      container.appendChild(btn);
+    });
+  }
+
+  function renderBillList() {
+    const listEl = document.getElementById("cf-bill-list");
+    listEl.innerHTML = "";
+    allBills().forEach(function (b) {
+      const row = document.createElement("div");
+      row.className = "bill-row" + (b.pinned ? " pinned" : "");
+      const monthly = billAnnual(b) / 12;
+
+      row.innerHTML =
+        '<div class="field-row">' +
+        '<div class="field"><label>Name</label><input type="text" class="b-name"' + (b.pinned ? " disabled" : "") + '></div>' +
+        '<div class="field"><label>Amount ($)</label><input type="number" step="25" min="0" class="b-amt"></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+        '<div class="field"><label>Cadence</label><select class="b-cadence"' + (b.pinned ? " disabled" : "") + '>' +
+        '<option value="monthly">Monthly</option><option value="quarterly">Quarterly</option>' +
+        '<option value="semiannual">Semi-annual</option><option value="annual">Annual</option></select></div>' +
+        '<div class="field"><label>Funded by</label><select class="b-funded"' + (b.pinned ? " disabled" : "") + '>' +
+        '<option value="regular">Regular pay</option><option value="bonus">Bonus</option></select></div>' +
+        '</div>';
+
+      const nameInput = row.querySelector(".b-name");
+      const amtInput = row.querySelector(".b-amt");
+      const cadenceSel = row.querySelector(".b-cadence");
+      const fundedSel = row.querySelector(".b-funded");
+      nameInput.value = b.name;
+      amtInput.value = b.pinned ? Math.round(b.amount) : b.amount;
+      cadenceSel.value = b.cadence;
+      fundedSel.value = b.fundedBy;
+
+      if (b.pinned) {
+        // Housing mirrors the Home Buying tab; typing here sets an override.
+        const sub = document.createElement("div");
+        sub.className = "field";
+        sub.innerHTML = '<div class="sub">Auto-filled from Home Buying: ' + fmt$(b.calculated) +
+          ' &middot; <button class="btn small" id="btn-reset-housing" type="button">Use calculated value</button></div>';
+        row.appendChild(sub);
+        amtInput.addEventListener("input", function (e) {
+          state.cashflow.housingOverrideActive = true;
+          state.cashflow.housingOverride = e.target.value === "" ? 0 : Number(e.target.value);
+          saveState();
+          renderAll();
+        });
+        sub.querySelector("#btn-reset-housing").addEventListener("click", function () {
+          state.cashflow.housingOverrideActive = false;
+          state.cashflow.housingOverride = null;
+          saveState();
+          renderAll();
+        });
+      } else {
+        nameInput.addEventListener("input", function (e) { b.name = e.target.value; saveState(); });
+        amtInput.addEventListener("input", function (e) {
+          b.amount = e.target.value === "" ? 0 : Number(e.target.value);
+          saveState();
+          renderAll();
+        });
+        cadenceSel.addEventListener("change", function (e) {
+          b.cadence = e.target.value;
+          b.dueMonths = [];
+          saveState();
+          renderAll();
+        });
+        fundedSel.addEventListener("change", function (e) { b.fundedBy = e.target.value; saveState(); renderAll(); });
+
+        if (b.cadence !== "monthly") {
+          const due = document.createElement("div");
+          due.className = "field";
+          due.innerHTML = '<label>Due month(s)</label><div class="month-picker"></div>' +
+            '<div class="sub">Defaults to ' + billDueMonths(b).map(function (m) { return MONTH_LABELS[m - 1]; }).join(", ") + ' if none picked.</div>';
+          row.appendChild(due);
+          renderMonthPicker(due.querySelector(".month-picker"), b.dueMonths || [], function (m) {
+            const idx = (b.dueMonths || []).indexOf(m);
+            if (idx === -1) b.dueMonths = (b.dueMonths || []).concat([m]);
+            else b.dueMonths = b.dueMonths.filter(function (x) { return x !== m; });
+            saveState();
+            renderAll();
+          });
+        }
+
+        const removeBtn = document.createElement("button");
+        removeBtn.className = "btn small danger";
+        removeBtn.type = "button";
+        removeBtn.textContent = "Remove";
+        removeBtn.addEventListener("click", function () {
+          state.cashflow.bills = state.cashflow.bills.filter(function (x) { return x.id !== b.id; });
+          saveState();
+          renderAll();
+        });
+        row.appendChild(removeBtn);
+      }
+
+      const eq = document.createElement("div");
+      eq.className = "derived";
+      eq.innerHTML = fmt$(monthly) + " / month equivalent &middot; " + fmt$(billAnnual(b)) + " / year";
+      row.appendChild(eq);
+
+      listEl.appendChild(row);
+    });
+  }
+
+  function renderCashFlow() {
+    const c = state.cashflow;
+    const cf = computeCashFlow();
+
+    document.getElementById("cf-bonusFrequency").value = c.bonusFrequency;
+    document.getElementById("cf-grossBonusLabel").textContent =
+      "Gross bonus pay (" + BONUS_FREQ_LABELS[c.bonusFrequency] + " $)";
+
+    renderMonthPicker(document.getElementById("cf-bonusMonths"), c.bonusMonths || [], function (m) {
+      const list = c.bonusMonths || [];
+      const idx = list.indexOf(m);
+      c.bonusMonths = idx === -1 ? list.concat([m]) : list.filter(function (x) { return x !== m; });
+      saveState();
+      renderAll();
+    });
+
+    renderDeductionList();
+    renderBillList();
+
+    document.getElementById("out-cf-netRegular").textContent = fmt$(cf.regular.net) + " / month";
+    document.getElementById("out-cf-netBonus").textContent =
+      fmt$(cf.bonus.net) + " / " + BONUS_FREQ_LABELS[c.bonusFrequency] + " check";
+
+    const cal = computeCashFlowCalendar();
+    document.getElementById("out-cf-bonusReserved").textContent = fmt$(cal.bonusReserved);
+    document.getElementById("out-cf-minRegular").textContent = fmt$(cal.minRegularBalance);
+    document.getElementById("out-cf-minCombined").textContent = fmt$(cal.minCombinedBalance);
+    document.getElementById("cf-reserve-note").textContent = cal.bonusReserved > 0
+      ? "Regular pay alone runs short in " + cal.negativeMonths.join(", ") +
+        ". You'd need to hold back " + fmt$(cal.bonusReserved) + " of bonus money to cover ordinary bills."
+      : "Regular pay covers every regular-funded bill on its own, every month. No bonus money is tied up in monthly bills.";
+
+    const body = document.getElementById("out-cf-calendar-body");
+    body.innerHTML = "";
+    cal.months.forEach(function (m) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + m.label + "</td><td>" + fmt$(m.regularIn) + "</td><td>" +
+        (m.bonusIn ? fmt$(m.bonusIn) : "—") + "</td><td>" + fmt$(m.regularOut) + "</td><td>" +
+        (m.bonusOut ? fmt$(m.bonusOut) : "—") + "</td><td>" + fmt$(m.regularBalance) + "</td><td>" +
+        fmt$(m.combinedBalance) + "</td>";
+      if (m.regularBalance < 0) tr.style.color = "var(--bad)";
+      body.appendChild(tr);
+    });
+  }
+
+  function renderAllocBlock(which, prefix, block, alloc, perMonth) {
+    const suffix = perMonth ? " / mo" : " / yr";
+    document.getElementById("alloc-" + which + "-percent").classList.toggle("active", block.mode === "percent");
+    document.getElementById("alloc-" + which + "-dollar").classList.toggle("active", block.mode === "dollar");
+    document.getElementById("alloc-" + which + "-percent-fields").style.display = block.mode === "percent" ? "block" : "none";
+    document.getElementById("alloc-" + which + "-dollar-fields").style.display = block.mode === "dollar" ? "block" : "none";
+
+    document.getElementById(prefix + "-discretionaryPct").value = block.discretionaryPct;
+    document.getElementById(prefix + "-savingsPct").value = block.savingsPct;
+    document.getElementById(prefix + "-kidsFuturePct").value = block.kidsFuturePct;
+    document.getElementById(prefix + "-payoffPct").value = block.payoffPct;
+    document.getElementById(prefix + "-discretionaryDollar").value = block.discretionaryDollar;
+    document.getElementById(prefix + "-savingsDollar").value = block.savingsDollar;
+    document.getElementById(prefix + "-kidsFutureDollar").value = block.kidsFutureDollar;
+    document.getElementById(prefix + "-payoffDollar").value = Math.round(alloc.payoff);
+
+    // The regular block is monthly, so show the annual equivalent alongside it.
+    function label(v) {
+      return perMonth ? fmt$(v) + " / mo · " + fmt$(v * 12) + " / yr" : fmt$(v) + suffix;
+    }
+    document.getElementById("out-" + prefix + "-discretionary").textContent = label(alloc.discretionary);
+    document.getElementById("out-" + prefix + "-savings").textContent = label(alloc.savings);
+    document.getElementById("out-" + prefix + "-kidsFuture").textContent = label(alloc.kidsFuture);
+    document.getElementById("out-" + prefix + "-payoff").textContent = label(alloc.payoff);
   }
 
   function renderSurplus() {
-    const s = state.surplus;
     const out = computeSurplus();
+    const cf = out.cf;
 
-    renderSurplusCategoryList();
+    document.getElementById("out-inc-grossRegular").textContent = fmt$(cf.regular.gross);
+    document.getElementById("out-inc-grossCombined").textContent = fmt$(cf.grossMonthlyCombined);
+    document.getElementById("out-inc-netRegular").textContent = fmt$(cf.regular.net);
+    document.getElementById("out-inc-netCombined").textContent = fmt$(cf.netMonthlyCombined);
 
-    document.getElementById("s-bonusFrequency").value = s.bonusFrequency;
-    document.getElementById("s-grossBonusLabel").textContent = "Gross bonus pay (" + BONUS_FREQ_LABELS[s.bonusFrequency] + " $)";
-    document.getElementById("s-bonusMultiplierNote").textContent = BONUS_FREQ_PER_YEAR[s.bonusFrequency];
-
-    document.getElementById("s-housingCalculated").textContent = fmt$(computeHousing().totalMonthly);
-    document.getElementById("s-housingOverride").value = s.housingOverrideActive ? s.housingOverride : Math.round(computeHousing().totalMonthly);
-
-    document.getElementById("s-retirementDollar").textContent = fmt$(out.retirementDollar) + " / month";
-
-    document.getElementById("out-surplusAnnual").textContent = fmt$(out.annualSurplus);
-    document.getElementById("out-surplusQuarterly").textContent = fmt$(out.quarterlySurplus);
-    document.getElementById("out-surplusMonthly").textContent = fmt$(out.monthlySurplus);
+    document.getElementById("out-mb-housing").textContent = fmt$(cf.housingCost);
+    document.getElementById("out-mb-bills").textContent = fmt$(cf.billsAnnual / 12 - cf.housingCost);
+    document.getElementById("out-mb-retirement").textContent = fmt$(cf.retirementDollar);
+    document.getElementById("out-mb-benefits").textContent = fmt$(cf.benefitsMonthly);
+    document.getElementById("out-mb-tithe").textContent = fmt$(cf.titheMonthly);
     document.getElementById("out-totalMonthlyBudget").textContent = fmt$(out.totalMonthlyBudget);
 
     document.getElementById("out-deductionsAnnual").textContent = fmt$(out.annualDeductions);
     document.getElementById("out-titheAnnual").textContent = fmt$(out.titheAnnual);
     document.getElementById("out-taxAnnual").textContent = fmt$(out.taxAnnual);
 
-    document.getElementById("split-percent").classList.toggle("active", s.splitMode === "percent");
-    document.getElementById("split-dollar").classList.toggle("active", s.splitMode === "dollar");
-    document.getElementById("split-percent-fields").style.display = s.splitMode === "percent" ? "block" : "none";
-    document.getElementById("split-dollar-fields").style.display = s.splitMode === "dollar" ? "block" : "none";
-    document.getElementById("s-vacationPct").value = s.vacationPct;
-    document.getElementById("s-savingsPct").value = s.savingsPct;
-    document.getElementById("s-kidsFuturePct").value = s.kidsFuturePct;
-    document.getElementById("s-payoffPct").value = s.payoffPct;
-    document.getElementById("s-vacationDollar").value = s.vacationDollar;
-    document.getElementById("s-savingsDollar").value = s.savingsDollar;
-    document.getElementById("s-kidsFutureDollar").value = s.kidsFutureDollar;
-    document.getElementById("s-payoffDollar").value = Math.round(out.payoffAnnual);
+    document.getElementById("out-surplusAnnual").textContent = fmt$(out.annualSurplus);
+    document.getElementById("out-surplusQuarterly").textContent = fmt$(out.quarterlySurplus);
+    document.getElementById("out-surplusMonthly").textContent = fmt$(out.monthlySurplus);
+    document.getElementById("out-regularSurplusMonthly").textContent = fmt$(out.regularSurplusMonthly);
+    document.getElementById("out-bonusLeftoverAnnual").textContent = fmt$(out.bonusLeftoverAnnual);
+    document.getElementById("out-regularSurplusNote").textContent = out.regularSurplusMonthly >= 0
+      ? "Regular pay covers its own bills with " + fmt$(out.regularSurplusMonthly) + " / month left over."
+      : "Regular pay falls " + fmt$(-out.regularSurplusMonthly) + " / month short of its own bills — the gap has to come from bonus money.";
+
+    document.getElementById("out-alloc-regularPool").textContent = fmt$(out.regularSurplusMonthly) + " / mo";
+    document.getElementById("out-alloc-bonusPool").textContent = fmt$(out.bonusLeftoverAnnual) + " / yr";
+    renderAllocBlock("regular", "ar", state.surplus.allocation.regular, out.regularAlloc, true);
+    renderAllocBlock("bonus", "ab", state.surplus.allocation.bonus, out.bonusAlloc, false);
 
     document.getElementById("out-vacationAnnual").textContent = fmt$(out.vacationAnnual);
     document.getElementById("out-savingsAnnual").textContent = fmt$(out.savingsAnnual);
@@ -3161,6 +3619,7 @@
   function renderAll() {
     renderGoals();
     renderHousing();
+    renderCashFlow();
     renderSurplus();
     renderPayoff();
     renderRetirement();
@@ -3225,6 +3684,7 @@
           migrateLegacyCategories(state, imported);
           migrateLegacyBonusFrequency(state, imported);
           migrateLegacyBrokerage(state);
+          migrateLegacyToCashFlow(state, imported);
           if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
           saveState();
           syncStaticFields();
