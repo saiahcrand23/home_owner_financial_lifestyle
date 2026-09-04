@@ -2835,7 +2835,7 @@
       amt.addEventListener("input", function (e) {
         d.amount = e.target.value === "" ? 0 : Number(e.target.value);
         saveState();
-        renderAll();
+        renderCashFlowTotalsOnly();
       });
 
       const applies = row.querySelector(".ded-applies");
@@ -2879,7 +2879,14 @@
     allBills().forEach(function (b) {
       const row = document.createElement("div");
       row.className = "bill-row" + (b.pinned ? " pinned" : "");
-      const monthly = billAnnual(b) / 12;
+      // Recomputed on input so the row's own derived line stays honest while
+      // typing, since the row is no longer rebuilt on every keystroke.
+      const eq = document.createElement("div");
+      eq.className = "derived";
+      function equivalentText() {
+        return fmt$(billAnnual(b) / 12) + " / month equivalent &middot; " + fmt$(billAnnual(b)) + " / year";
+      }
+      function updateEquivalent() { eq.innerHTML = equivalentText(); }
 
       row.innerHTML =
         '<div class="field-row">' +
@@ -2913,8 +2920,10 @@
         amtInput.addEventListener("input", function (e) {
           state.cashflow.housingOverrideActive = true;
           state.cashflow.housingOverride = e.target.value === "" ? 0 : Number(e.target.value);
+          b.amount = state.cashflow.housingOverride;
           saveState();
-          renderAll();
+          updateEquivalent();
+          renderCashFlowTotalsOnly();
         });
         sub.querySelector("#btn-reset-housing").addEventListener("click", function () {
           state.cashflow.housingOverrideActive = false;
@@ -2927,7 +2936,8 @@
         amtInput.addEventListener("input", function (e) {
           b.amount = e.target.value === "" ? 0 : Number(e.target.value);
           saveState();
-          renderAll();
+          updateEquivalent();
+          renderCashFlowTotalsOnly();
         });
         cadenceSel.addEventListener("change", function (e) {
           b.cadence = e.target.value;
@@ -2964,9 +2974,7 @@
         row.appendChild(removeBtn);
       }
 
-      const eq = document.createElement("div");
-      eq.className = "derived";
-      eq.innerHTML = fmt$(monthly) + " / month equivalent &middot; " + fmt$(billAnnual(b)) + " / year";
+      eq.innerHTML = equivalentText();
       row.appendChild(eq);
 
       listEl.appendChild(row);
@@ -2991,6 +2999,15 @@
 
     renderDeductionList();
     renderBillList();
+    renderCashFlowOutputs();
+  }
+
+  // Every derived number on the Cash Flow tab, with no DOM rebuilding. Split
+  // out of renderCashFlow so a keystroke inside a deduction or bill row can
+  // refresh the totals without tearing down the row being typed in.
+  function renderCashFlowOutputs() {
+    const c = state.cashflow;
+    const cf = computeCashFlow();
 
     document.getElementById("out-cf-netRegular").textContent = fmt$(cf.regular.net) + " / month";
     document.getElementById("out-cf-netBonus").textContent =
@@ -3018,6 +3035,23 @@
     });
   }
 
+  // Row-level edits call this instead of renderAll(): it updates every number
+  // that depends on cash flow, but rebuilds none of the rows.
+  function renderCashFlowTotalsOnly() {
+    renderCashFlowOutputs();
+    renderSurplus();
+    renderPayoff();
+    renderRetirement();
+    renderKids();
+  }
+
+  // Writing .value into the input someone is actively typing in resets their
+  // cursor, so leave the focused element alone.
+  function setInputValue(id, value) {
+    const el = document.getElementById(id);
+    if (el && el !== document.activeElement) el.value = value;
+  }
+
   function renderAllocBlock(which, prefix, block, alloc, perMonth) {
     const suffix = perMonth ? " / mo" : " / yr";
     document.getElementById("alloc-" + which + "-percent").classList.toggle("active", block.mode === "percent");
@@ -3025,14 +3059,14 @@
     document.getElementById("alloc-" + which + "-percent-fields").style.display = block.mode === "percent" ? "block" : "none";
     document.getElementById("alloc-" + which + "-dollar-fields").style.display = block.mode === "dollar" ? "block" : "none";
 
-    document.getElementById(prefix + "-discretionaryPct").value = block.discretionaryPct;
-    document.getElementById(prefix + "-savingsPct").value = block.savingsPct;
-    document.getElementById(prefix + "-kidsFuturePct").value = block.kidsFuturePct;
-    document.getElementById(prefix + "-payoffPct").value = block.payoffPct;
-    document.getElementById(prefix + "-discretionaryDollar").value = block.discretionaryDollar;
-    document.getElementById(prefix + "-savingsDollar").value = block.savingsDollar;
-    document.getElementById(prefix + "-kidsFutureDollar").value = block.kidsFutureDollar;
-    document.getElementById(prefix + "-payoffDollar").value = Math.round(alloc.payoff);
+    setInputValue(prefix + "-discretionaryPct", block.discretionaryPct);
+    setInputValue(prefix + "-savingsPct", block.savingsPct);
+    setInputValue(prefix + "-kidsFuturePct", block.kidsFuturePct);
+    setInputValue(prefix + "-payoffPct", block.payoffPct);
+    setInputValue(prefix + "-discretionaryDollar", block.discretionaryDollar);
+    setInputValue(prefix + "-savingsDollar", block.savingsDollar);
+    setInputValue(prefix + "-kidsFutureDollar", block.kidsFutureDollar);
+    setInputValue(prefix + "-payoffDollar", Math.round(alloc.payoff));
 
     // The regular block is monthly, so show the annual equivalent alongside it.
     function label(v) {
