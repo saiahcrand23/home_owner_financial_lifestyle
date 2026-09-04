@@ -624,14 +624,22 @@
 
       <div class="card full-width">
         <h2>12-month running balance</h2>
+        <div class="field">
+          <label>Cash on hand at the start of the cycle ($)</label>
+          <input type="number" id="cf-openingBalance" step="500">
+          <div class="sub">Money carried in from last year &mdash; e.g. a December bonus funding a January expense. Seeds the bonus and combined lines; the regular-only line always starts at $0 on purpose.</div>
+        </div>
         <div class="stat total"><span>Bonus reserved for monthly bills</span><span class="val" id="out-cf-bonusReserved"></span></div>
         <div class="note" id="cf-reserve-note"></div>
+        <div class="stat total"><span>Bonus bills floated by regular pay</span><span class="val" id="out-cf-bonusShortfall"></span></div>
+        <div class="note" id="cf-bonus-note"></div>
         <div class="stat"><span>Lowest regular-only balance</span><span class="val" id="out-cf-minRegular"></span></div>
+        <div class="stat"><span>Lowest bonus-only balance</span><span class="val" id="out-cf-minBonus"></span></div>
         <div class="stat"><span>Lowest combined balance</span><span class="val" id="out-cf-minCombined"></span></div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Month</th><th>Regular in</th><th>Bonus in</th><th>Regular bills</th><th>Bonus bills</th><th>Regular-only balance</th><th>Combined balance</th></tr>
+              <tr><th>Month</th><th>Regular in</th><th>Bonus in</th><th>Regular bills</th><th>Bonus bills</th><th>Regular-only balance</th><th>Bonus-only balance</th><th>Combined balance</th></tr>
             </thead>
             <tbody id="out-cf-calendar-body"></tbody>
           </table>
@@ -1038,7 +1046,8 @@
         { id: 2, name: "Wants", amount: 400, cadence: "monthly", fundedBy: "regular", dueMonths: [] }
       ],
       housingOverride: null,
-      housingOverrideActive: false
+      housingOverrideActive: false,
+      openingBalance: 0
     },
     surplus: {
       allocation: {
@@ -1772,8 +1781,15 @@
   function computeCashFlowCalendar() {
     const cf = computeCashFlow();
     const bonusMonths = (state.cashflow.bonusMonths || []).filter(function (m) { return m >= 1 && m <= 12; });
+    const opening = Number(state.cashflow.openingBalance) || 0;
     const months = [];
-    let regularBal = 0, combinedBal = 0;
+    // The regular-only line deliberately starts at zero no matter what cash is
+    // carried in: it answers "can regular pay stand on its own from cold", and
+    // seeding it with a buffer (which is bonus money) would mask exactly the
+    // dependency this tab exists to expose. Carried-in cash is bonus money, so
+    // it seeds the bonus line — and the combined line inherits it from there,
+    // keeping combined === regular + bonus.
+    let regularBal = 0, bonusBal = opening, combinedBal = opening;
     for (let m = 1; m <= 12; m++) {
       let regularOut = 0, bonusOut = 0;
       cf.bills.forEach(function (b) {
@@ -1783,22 +1799,29 @@
       });
       const bonusIn = bonusMonths.indexOf(m) !== -1 ? cf.bonus.net : 0;
       regularBal += cf.regular.net - regularOut;
+      bonusBal += bonusIn - bonusOut;
       combinedBal += cf.regular.net + bonusIn - regularOut - bonusOut;
       months.push({
         month: m, label: MONTH_LABELS[m - 1],
         regularIn: cf.regular.net, bonusIn: bonusIn,
         regularOut: regularOut, bonusOut: bonusOut,
-        regularBalance: regularBal, combinedBalance: combinedBal
+        regularBalance: regularBal, bonusBalance: bonusBal, combinedBalance: combinedBal
       });
     }
     const worstRegular = months.reduce(function (lo, x) { return Math.min(lo, x.regularBalance); }, Infinity);
+    const worstBonus = months.reduce(function (lo, x) { return Math.min(lo, x.bonusBalance); }, Infinity);
     const worstCombined = months.reduce(function (lo, x) { return Math.min(lo, x.combinedBalance); }, Infinity);
     return {
-      months: months,
+      months: months, opening: opening,
       bonusReserved: Math.max(0, -worstRegular),
+      // A negative bonus line means a bonus-funded bill came due before the
+      // bonus money to cover it did — regular pay quietly floated it.
+      bonusShortfall: Math.max(0, -worstBonus),
       minRegularBalance: worstRegular,
+      minBonusBalance: worstBonus,
       minCombinedBalance: worstCombined,
-      negativeMonths: months.filter(function (x) { return x.regularBalance < 0; }).map(function (x) { return x.label; })
+      negativeMonths: months.filter(function (x) { return x.regularBalance < 0; }).map(function (x) { return x.label; }),
+      bonusNegativeMonths: months.filter(function (x) { return x.bonusBalance < 0; }).map(function (x) { return x.label; })
     };
   }
 
@@ -2224,6 +2247,7 @@
 
     bindNumber("cf-grossRegularMonthly", function () { return state.cashflow.grossRegularMonthly; }, function (v) { state.cashflow.grossRegularMonthly = v; });
     bindNumber("cf-grossBonusAmount", function () { return state.cashflow.grossBonusAmount; }, function (v) { state.cashflow.grossBonusAmount = v; });
+    bindNumber("cf-openingBalance", function () { return state.cashflow.openingBalance; }, function (v) { state.cashflow.openingBalance = v; });
     bindNumber("cf-taxRateRegular", function () { return state.cashflow.taxRateRegular; }, function (v) { state.cashflow.taxRateRegular = v; });
     bindNumber("cf-taxRateBonus", function () { return state.cashflow.taxRateBonus; }, function (v) { state.cashflow.taxRateBonus = v; });
     document.getElementById("cf-bonusFrequency").addEventListener("change", function (e) {
@@ -3015,8 +3039,14 @@
 
     const cal = computeCashFlowCalendar();
     document.getElementById("out-cf-bonusReserved").textContent = fmt$(cal.bonusReserved);
+    document.getElementById("out-cf-bonusShortfall").textContent = fmt$(cal.bonusShortfall);
     document.getElementById("out-cf-minRegular").textContent = fmt$(cal.minRegularBalance);
+    document.getElementById("out-cf-minBonus").textContent = fmt$(cal.minBonusBalance);
     document.getElementById("out-cf-minCombined").textContent = fmt$(cal.minCombinedBalance);
+    document.getElementById("cf-bonus-note").textContent = cal.bonusShortfall > 0
+      ? "Bonus-funded bills come due before the bonus money does in " + cal.bonusNegativeMonths.join(", ") +
+        ". Regular pay is floating up to " + fmt$(cal.bonusShortfall) + " of them — carry in that much, or move those bills to a later month."
+      : "Every bonus-funded bill is covered by bonus money that has already arrived.";
     document.getElementById("cf-reserve-note").textContent = cal.bonusReserved > 0
       ? "Regular pay alone runs short in " + cal.negativeMonths.join(", ") +
         ". You'd need to hold back " + fmt$(cal.bonusReserved) + " of bonus money to cover ordinary bills."
@@ -3029,8 +3059,8 @@
       tr.innerHTML = "<td>" + m.label + "</td><td>" + fmt$(m.regularIn) + "</td><td>" +
         (m.bonusIn ? fmt$(m.bonusIn) : "—") + "</td><td>" + fmt$(m.regularOut) + "</td><td>" +
         (m.bonusOut ? fmt$(m.bonusOut) : "—") + "</td><td>" + fmt$(m.regularBalance) + "</td><td>" +
-        fmt$(m.combinedBalance) + "</td>";
-      if (m.regularBalance < 0) tr.style.color = "var(--bad)";
+        fmt$(m.bonusBalance) + "</td><td>" + fmt$(m.combinedBalance) + "</td>";
+      if (m.regularBalance < 0 || m.bonusBalance < 0) tr.style.color = "var(--bad)";
       body.appendChild(tr);
     });
   }
