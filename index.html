@@ -975,12 +975,12 @@
       customGoals: [],
       contribs: [
         { id: 1, freq: "oneoff", amt: "3050", start: "", end: "", day: "2026-07-19" },
-        { id: 2, freq: "monthly", amt: "300", start: "2026-08", end: "", day: "" },
-        { id: 3, freq: "quarterly", amt: "600", start: "2026-09", end: "", day: "" },
+        { id: 2, freq: "monthly", amt: "300", start: "2026-08-01", end: "", day: "" },
+        { id: 3, freq: "quarterly", amt: "600", start: "2026-09-01", end: "", day: "" },
         { id: 4, freq: "oneoff", amt: "500", start: "", end: "", day: "2027-03-15" },
         { id: 5, freq: "oneoff", amt: "1500", start: "", end: "", day: "2026-09-20" },
         { id: 6, freq: "oneoff", amt: "800", start: "", end: "", day: "2026-12-20" },
-        { id: 7, freq: "oneoff", amt: "600", start: "2027-03", end: "", day: "2027-03-20" }
+        { id: 7, freq: "oneoff", amt: "600", start: "2027-03-01", end: "", day: "2027-03-20" }
       ]
     },
     housing: {
@@ -1183,9 +1183,21 @@
       "taxRate", "hsaMonthly", "healthInsuranceMonthly", "categoryId", "categories",
       "housingOverride", "housingOverrideActive", "retirementPct", "splitMode",
       "vacationPct", "savingsPct", "kidsFuturePct", "payoffPct",
-      "vacationDollar", "savingsDollar", "kidsFutureDollar"].forEach(function (k) {
+      "vacationDollar", "savingsDollar", "kidsFutureDollar",
+      "needs", "wants"].forEach(function (k) {
         delete target.surplus[k];
       });
+  }
+
+  // Pre-dates recurring contributions carrying a day: start/end were stored as
+  // "YYYY-MM" and rendered with <input type="month">, which a date input will
+  // not accept. Anchor those to the 1st.
+  function migrateLegacyContribDates(target) {
+    (target.goals.contribs || []).forEach(function (c) {
+      ["start", "end"].forEach(function (key) {
+        if (/^\d{4}-\d{2}$/.test(c[key] || "")) c[key] = c[key] + "-01";
+      });
+    });
   }
 
   function loadState() {
@@ -1199,6 +1211,7 @@
     migrateLegacyBonusFrequency(state, saved);
     migrateLegacyBrokerage(state);
     migrateLegacyToCashFlow(state, saved);
+    migrateLegacyContribDates(state);
     if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
   }
 
@@ -1257,21 +1270,29 @@
     if (!apy || bal <= 0) return 0;
     return bal * (Math.pow(1 + apy / 100 / 365, goalsDaysInMonth(y, m)) - 1);
   }
-  function goalsParseYM(str) {
+  // Accepts both "YYYY-MM-DD" and the legacy "YYYY-MM" (day defaults to the
+  // 1st), so contributions saved before recurring rules carried a day still
+  // parse if they somehow reach here unmigrated.
+  function goalsParseDate(str) {
     if (!str) return null;
     const parts = str.split("-").map(Number);
-    return new Date(parts[0], parts[1] - 1, 1);
-  }
-  function goalsParseYMD(str) {
-    if (!str) return null;
-    const parts = str.split("-").map(Number);
-    return new Date(parts[0], parts[1] - 1, parts[2]);
+    if (parts.length < 2 || !parts[0] || !parts[1]) return null;
+    return new Date(parts[0], parts[1] - 1, parts.length > 2 ? parts[2] : 1);
   }
   function goalsFmtDate(d) { return d.toLocaleString("default", { month: "long", year: "numeric" }); }
   function goalsMonthKey(d) { return d.getFullYear() * 12 + d.getMonth(); }
   function goalsAddMonths(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
+  // Advances n whole months from base, keeping the day-of-month and clamping
+  // to the last day of shorter months (Jan 31 -> Feb 28). Always measured from
+  // the original start date so repeated clamping can't drift the schedule
+  // earlier (31st -> 28th -> 28th...).
+  function goalsAddMonthsKeepDay(base, n) {
+    const target = new Date(base.getFullYear(), base.getMonth() + n, 1);
+    const dim = goalsDaysInMonth(target.getFullYear(), target.getMonth());
+    return new Date(target.getFullYear(), target.getMonth(), Math.min(base.getDate(), dim));
+  }
   function goalsContribSortDate(c) {
-    return c.freq === "oneoff" ? goalsParseYMD(c.day) : goalsParseYM(c.start);
+    return c.freq === "oneoff" ? goalsParseDate(c.day) : goalsParseDate(c.start);
   }
   // Undated contributions sort to the end, stable relative order preserved.
   function goalsSortedContribs(contribs) {
@@ -1286,10 +1307,13 @@
 
   function goalsBuildCashMap(contribs, simStart, simEnd) {
     const map = new Map();
+    // The simulation steps a month at a time, so a date's day-of-month only
+    // decides which month it lands in — compare on the month, not the day.
     const add = function (d, amt) {
-      if (!d || d < simStart || (simEnd && d > simEnd)) return;
-      const k = goalsMonthKey(d);
-      map.set(k, (map.get(k) || 0) + amt);
+      if (!d) return;
+      const floored = new Date(d.getFullYear(), d.getMonth(), 1);
+      if (floored < simStart || (simEnd && floored > simEnd)) return;
+      map.set(goalsMonthKey(floored), (map.get(goalsMonthKey(floored)) || 0) + amt);
     };
     contribs.forEach(function (c) {
       const amt = parseFloat(c.amt) || 0;
@@ -1297,19 +1321,21 @@
       const freq = c.freq || "monthly";
       if (freq === "oneoff") {
         if (!c.day) return;
-        const d = goalsParseYMD(c.day);
+        const d = goalsParseDate(c.day);
         if (d) add(new Date(d.getFullYear(), d.getMonth(), 1), amt);
         return;
       }
-      const startD = goalsParseYM(c.start);
+      const startD = goalsParseDate(c.start);
       if (!startD) return;
-      const endD = c.end ? goalsParseYM(c.end) : null;
+      const endD = c.end ? goalsParseDate(c.end) : null;
       const step = { monthly: 1, biweekly: 1, quarterly: 3, annually: 12 }[freq] || 1;
       const multiplier = freq === "biweekly" ? 26 / 12 : 1;
+      let occurrence = 0;
       let cur = new Date(startD);
-      while ((!endD || cur <= endD) && (!simEnd || cur <= simEnd)) {
+      while ((!endD || cur <= endD) && (!simEnd || cur <= simEnd) && occurrence < 1200) {
         add(new Date(cur), amt * multiplier);
-        cur = goalsAddMonths(cur, step);
+        occurrence += 1;
+        cur = goalsAddMonthsKeepDay(startD, occurrence * step);
       }
     });
     return map;
@@ -1365,7 +1391,7 @@
 
     let simStart = null;
     g.contribs.forEach(function (c) {
-      const d = c.freq === "oneoff" ? (c.day ? goalsParseYMD(c.day) : null) : goalsParseYM(c.start);
+      const d = c.freq === "oneoff" ? (c.day ? goalsParseDate(c.day) : null) : goalsParseDate(c.start);
       if (d && (!simStart || d < simStart)) simStart = new Date(d.getFullYear(), d.getMonth(), 1);
     });
     if (!simStart) return { error: "Set a start date on at least one contribution." };
@@ -1959,7 +1985,7 @@
   }
 
   function kidsStartMonthDate() {
-    const d = goalsParseYMD(state.kids.startDate) || new Date();
+    const d = goalsParseDate(state.kids.startDate) || new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   }
 
@@ -2029,7 +2055,7 @@
     const eligible = [];
     k.children.forEach(function (child) {
       const acct = child.plan529;
-      const dob = goalsParseYMD(child.dob);
+      const dob = goalsParseDate(child.dob);
       if (!acct || !acct.enabled || !dob) return;
       const proj = kidsAccountProjection(dob, acct.collegeAge, acct.returnRatePct, 100, startMonthDate, baseAnnualPool, overridesSorted);
       if (proj.months > 0 && proj.balance > 0) eligible.push({ child: child, acct: acct, fvUnit: proj.balance });
@@ -2056,7 +2082,7 @@
     function accountOutput(child) {
       const acct = child.plan529;
       if (!acct || !acct.enabled) return null;
-      const dob = goalsParseYMD(child.dob);
+      const dob = goalsParseDate(child.dob);
       const dollarAmountToday = baseAnnualPool * (acct.allocPct / 100);
       if (!dob) return { noDob: true, allocPct: acct.allocPct, dollarAmountToday: dollarAmountToday };
 
@@ -2493,8 +2519,8 @@
         fieldsHtml += '<div class="field"><label>Date</label><input type="date" class="g-c-day"></div>';
       } else {
         fieldsHtml += '<div class="field-row">' +
-          '<div class="field"><label>Start month</label><input type="month" class="g-c-start"></div>' +
-          '<div class="field"><label>End month (optional)</label><input type="month" class="g-c-end"></div>' +
+          '<div class="field"><label>Start date</label><input type="date" class="g-c-start"></div>' +
+          '<div class="field"><label>End date (optional)</label><input type="date" class="g-c-end"></div>' +
           '</div>';
       }
 
@@ -3685,6 +3711,7 @@
           migrateLegacyBonusFrequency(state, imported);
           migrateLegacyBrokerage(state);
           migrateLegacyToCashFlow(state, imported);
+          migrateLegacyContribDates(state);
           if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
           saveState();
           syncStaticFields();
