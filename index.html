@@ -623,6 +623,15 @@
       </div>
 
       <div class="card full-width">
+        <h2>Sinking funds</h2>
+        <p class="hint">Savings targets with no due date &mdash; home repairs, a future car, a vet fund. These are transfers, not bills: the money is still yours, so they don&rsquo;t reduce your surplus. They&rsquo;re reported as a commitment against it, and they do come out of your cash balance below.</p>
+        <div id="cf-fund-list"></div>
+        <button class="btn" id="cf-add-fund" type="button">+ Add sinking fund</button>
+        <div class="stat"><span>Monthly total</span><span class="val" id="out-cf-sinkingMonthly"></span></div>
+        <div class="note" id="cf-sinking-note"></div>
+      </div>
+
+      <div class="card full-width">
         <h2>12-month running balance</h2>
         <div class="field">
           <label>Cash on hand at the start of the cycle ($)</label>
@@ -635,11 +644,12 @@
         <div class="note" id="cf-bonus-note"></div>
         <div class="stat"><span>Lowest regular-only balance</span><span class="val" id="out-cf-minRegular"></span></div>
         <div class="stat"><span>Lowest bonus-only balance</span><span class="val" id="out-cf-minBonus"></span></div>
-        <div class="stat"><span>Lowest combined balance</span><span class="val" id="out-cf-minCombined"></span></div>
+        <div class="stat"><span>Lowest cash balance</span><span class="val" id="out-cf-minCombined"></span></div>
+        <div class="note">Regular-only and bonus-only track bills alone, so they stay honest diagnostics. Cash balance is what&rsquo;s actually in the account: those two, minus sinking transfers.</div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Month</th><th>Regular in</th><th>Bonus in</th><th>Regular bills</th><th>Bonus bills</th><th>Regular-only balance</th><th>Bonus-only balance</th><th>Combined balance</th></tr>
+              <tr><th>Month</th><th>Regular in</th><th>Bonus in</th><th>Regular bills</th><th>Bonus bills</th><th>Sinking</th><th>Regular-only balance</th><th>Bonus-only balance</th><th>Cash balance</th></tr>
             </thead>
             <tbody id="out-cf-calendar-body"></tbody>
           </table>
@@ -691,6 +701,10 @@
         <h3>By source</h3>
         <div class="stat"><span>Regular pay surplus / month</span><span class="val" id="out-regularSurplusMonthly"></span></div>
         <div class="stat"><span>Bonus leftover / year</span><span class="val" id="out-bonusLeftoverAnnual"></span></div>
+        <h3>Commitments</h3>
+        <div class="stat"><span>Sinking funds / month</span><span class="val" id="out-sinkingMonthly"></span></div>
+        <div class="stat total"><span>Uncommitted surplus / month</span><span class="val" id="out-uncommittedMonthly"></span></div>
+        <div class="note">Sinking funds are transfers, not spending, so they don&rsquo;t reduce surplus &mdash; the allocation below still divides the full amount. This line shows what&rsquo;s left after them, at today&rsquo;s contribution rate; the Cash Flow calendar shows funds filling up and freeing that money again.</div>
         <div class="note" id="out-regularSurplusNote"></div>
       </div>
 
@@ -1047,7 +1061,9 @@
       ],
       housingOverride: null,
       housingOverrideActive: false,
-      openingBalance: 0
+      openingBalance: 0,
+      sinkingFundId: 0,
+      sinkingFunds: []
     },
     surplus: {
       allocation: {
@@ -1746,6 +1762,54 @@
     const regularSurplusMonthly = regular.net - regularBillsAnnual / 12;
     const bonusLeftoverAnnual = netBonusAnnual - bonusBillsAnnual;
 
+    // Sinking funds are transfers, not expenses — the money is still yours, so
+    // they sit outside the surplus calculation and are reported as a
+    // commitment against it. Regular-funded amounts are per month; bonus-funded
+    // amounts are per bonus check, since that is how the money arrives.
+    const funds = c.sinkingFunds || [];
+    // A fund that has reached its target stops drawing; only funds with room
+    // left count toward the commitment or share the leftover pool.
+    function fundHasRoom(f) {
+      const target = Number(f.target) || 0;
+      return target <= 0 || (Number(f.balance) || 0) < target;
+    }
+    let fixedRegularMonthly = 0, fixedBonusPerCheck = 0;
+    funds.forEach(function (f) {
+      if (f.mode === "leftover" || !fundHasRoom(f)) return;
+      const amt = Number(f.contribution) || 0;
+      if (f.fundedBy === "bonus") fixedBonusPerCheck += amt; else fixedRegularMonthly += amt;
+    });
+    // "Leftover" funds share whatever remains after the fixed ones, equally.
+    const leftoverRegular = funds.filter(function (f) { return f.mode === "leftover" && f.fundedBy !== "bonus" && fundHasRoom(f); });
+    const leftoverBonus = funds.filter(function (f) { return f.mode === "leftover" && f.fundedBy === "bonus" && fundHasRoom(f); });
+    const regularRemainder = Math.max(regularSurplusMonthly - fixedRegularMonthly, 0);
+    const bonusRemainder = Math.max(bonusLeftoverAnnual - fixedBonusPerCheck * bonusPerYear, 0);
+    const leftoverRegularEach = leftoverRegular.length ? regularRemainder / leftoverRegular.length : 0;
+    const leftoverBonusEachPerCheck = leftoverBonus.length && bonusPerYear
+      ? bonusRemainder / bonusPerYear / leftoverBonus.length : 0;
+
+    // Per-fund monthly-equivalent contribution, for projections and the calendar.
+    const fundPlan = funds.map(function (f) {
+      const isBonus = f.fundedBy === "bonus";
+      const perOccurrence = !fundHasRoom(f) ? 0 : (f.mode === "leftover"
+        ? (isBonus ? leftoverBonusEachPerCheck : leftoverRegularEach)
+        : (Number(f.contribution) || 0));
+      const monthly = isBonus ? perOccurrence * bonusPerYear / 12 : perOccurrence;
+      const target = Number(f.target) || 0;
+      const balance = Number(f.balance) || 0;
+      const remaining = Math.max(target - balance, 0);
+      return {
+        fund: f, isBonus: isBonus, perOccurrence: perOccurrence, monthly: monthly,
+        target: target, balance: balance, remaining: remaining,
+        monthsToTarget: (monthly > 0 && remaining > 0) ? Math.ceil(remaining / monthly) : (remaining <= 0 ? 0 : null)
+      };
+    });
+    const sinkingRegularMonthly = fixedRegularMonthly + leftoverRegularEach * leftoverRegular.length;
+    const sinkingBonusAnnual = (fixedBonusPerCheck + leftoverBonusEachPerCheck * leftoverBonus.length) * bonusPerYear;
+    const sinkingMonthlyTotal = sinkingRegularMonthly + sinkingBonusAnnual / 12;
+    const uncommittedRegularMonthly = regularSurplusMonthly - sinkingRegularMonthly;
+    const uncommittedBonusAnnual = bonusLeftoverAnnual - sinkingBonusAnnual;
+
     const grossMonthlyCombined = c.grossRegularMonthly + (c.grossBonusAmount * bonusPerYear) / 12;
     const netMonthlyCombined = regular.net + netBonusAnnual / 12;
 
@@ -1771,7 +1835,13 @@
       bonusLeftoverAnnual: bonusLeftoverAnnual,
       grossMonthlyCombined: grossMonthlyCombined, netMonthlyCombined: netMonthlyCombined,
       titheMonthly: titheMonthly, retirementDollar: retirementDollar, benefitsMonthly: benefitsMonthly,
-      taxAnnual: taxAnnual, housingCost: bills[0].amount
+      taxAnnual: taxAnnual, housingCost: bills[0].amount,
+      fundPlan: fundPlan,
+      sinkingRegularMonthly: sinkingRegularMonthly, sinkingBonusAnnual: sinkingBonusAnnual,
+      sinkingMonthlyTotal: sinkingMonthlyTotal,
+      uncommittedRegularMonthly: uncommittedRegularMonthly,
+      uncommittedBonusAnnual: uncommittedBonusAnnual,
+      uncommittedAnnual: uncommittedRegularMonthly * 12 + uncommittedBonusAnnual
     };
   }
 
@@ -1789,7 +1859,11 @@
     // dependency this tab exists to expose. Carried-in cash is bonus money, so
     // it seeds the bonus line — and the combined line inherits it from there,
     // keeping combined === regular + bonus.
-    let regularBal = 0, bonusBal = opening, combinedBal = opening;
+    let regularBal = 0, bonusBal = opening, cashBal = opening;
+    // Funds stop receiving once they hit target, so a fund that fills in month
+    // five stops draining cash for the rest of the year.
+    const fundBalances = cf.fundPlan.map(function (p) { return p.balance; });
+    let sinkingCumulative = 0;
     for (let m = 1; m <= 12; m++) {
       let regularOut = 0, bonusOut = 0;
       cf.bills.forEach(function (b) {
@@ -1798,14 +1872,29 @@
         if (b.fundedBy === "bonus") bonusOut += perHit; else regularOut += perHit;
       });
       const bonusIn = bonusMonths.indexOf(m) !== -1 ? cf.bonus.net : 0;
+      let sinkingOut = 0;
+      cf.fundPlan.forEach(function (plan, i) {
+        // Bonus-funded transfers only happen in months a bonus actually lands.
+        let amt = plan.isBonus ? (bonusMonths.indexOf(m) !== -1 ? plan.perOccurrence : 0) : plan.monthly;
+        if (plan.target > 0) amt = Math.min(amt, Math.max(0, plan.target - fundBalances[i]));
+        fundBalances[i] += amt;
+        sinkingOut += amt;
+      });
+      sinkingCumulative += sinkingOut;
+
+      // The regular-only and bonus-only lines stay bills-only: they diagnose
+      // whether income covers obligations. A sinking transfer is discretionary
+      // — you'd skip it in a tight month — so counting it there would report a
+      // saving habit as a shortfall.
       regularBal += cf.regular.net - regularOut;
       bonusBal += bonusIn - bonusOut;
-      combinedBal += cf.regular.net + bonusIn - regularOut - bonusOut;
+      cashBal += cf.regular.net + bonusIn - regularOut - bonusOut - sinkingOut;
       months.push({
         month: m, label: MONTH_LABELS[m - 1],
         regularIn: cf.regular.net, bonusIn: bonusIn,
-        regularOut: regularOut, bonusOut: bonusOut,
-        regularBalance: regularBal, bonusBalance: bonusBal, combinedBalance: combinedBal
+        regularOut: regularOut, bonusOut: bonusOut, sinkingOut: sinkingOut,
+        regularBalance: regularBal, bonusBalance: bonusBal,
+        combinedBalance: cashBal, sinkingCumulative: sinkingCumulative
       });
     }
     const worstRegular = months.reduce(function (lo, x) { return Math.min(lo, x.regularBalance); }, Infinity);
@@ -1871,6 +1960,11 @@
       totalMonthlyBudget: totalMonthlyBudget,
       annualSurplus: annualSurplus, quarterlySurplus: annualSurplus / 4, monthlySurplus: annualSurplus / 12,
       regularSurplusMonthly: cf.regularSurplusMonthly, bonusLeftoverAnnual: cf.bonusLeftoverAnnual,
+      sinkingMonthlyTotal: cf.sinkingMonthlyTotal, sinkingRegularMonthly: cf.sinkingRegularMonthly,
+      sinkingBonusAnnual: cf.sinkingBonusAnnual,
+      uncommittedRegularMonthly: cf.uncommittedRegularMonthly,
+      uncommittedBonusAnnual: cf.uncommittedBonusAnnual,
+      uncommittedAnnual: cf.uncommittedAnnual,
       regularAlloc: regularAlloc, bonusAlloc: bonusAlloc,
       vacationAnnual: vacationAnnual, savingsAnnual: savingsAnnual,
       kidsFutureAnnual: kidsFutureAnnual, payoffAnnual: payoffAnnual,
@@ -2252,6 +2346,16 @@
     bindNumber("cf-taxRateBonus", function () { return state.cashflow.taxRateBonus; }, function (v) { state.cashflow.taxRateBonus = v; });
     document.getElementById("cf-bonusFrequency").addEventListener("change", function (e) {
       state.cashflow.bonusFrequency = e.target.value;
+      saveState();
+      renderAll();
+    });
+
+    document.getElementById("cf-add-fund").addEventListener("click", function () {
+      state.cashflow.sinkingFundId += 1;
+      state.cashflow.sinkingFunds.push({
+        id: state.cashflow.sinkingFundId, name: "New fund", target: 0, balance: 0,
+        contribution: 0, mode: "fixed", fundedBy: "regular"
+      });
       saveState();
       renderAll();
     });
@@ -3005,6 +3109,104 @@
     });
   }
 
+  function renderSinkingFundList() {
+    const funds = state.cashflow.sinkingFunds;
+    const listEl = document.getElementById("cf-fund-list");
+    const plans = computeCashFlow().fundPlan;
+    listEl.innerHTML = "";
+    if (!funds.length) {
+      listEl.innerHTML = '<p class="empty-msg">No sinking funds yet</p>';
+      return;
+    }
+    funds.forEach(function (f, idx) {
+      const plan = plans[idx];
+      const row = document.createElement("div");
+      row.className = "bill-row";
+      const isLeftover = f.mode === "leftover";
+
+      row.innerHTML =
+        '<div class="field-row">' +
+        '<div class="field"><label>Name</label><input type="text" class="f-name"></div>' +
+        '<div class="field"><label>Target ($)</label><input type="number" step="500" min="0" class="f-target"></div>' +
+        '<div class="field"><label>Have now ($)</label><input type="number" step="100" min="0" class="f-balance"></div>' +
+        '</div>' +
+        '<div class="field-row">' +
+        '<div class="field"><label>Contribute</label><select class="f-mode">' +
+        '<option value="fixed">Fixed amount</option><option value="leftover">Whatever is left</option>' +
+        '</select></div>' +
+        '<div class="field"><label>Funded by</label><select class="f-funded">' +
+        '<option value="regular">Regular pay</option><option value="bonus">Bonus</option></select></div>' +
+        (isLeftover ? '' :
+          '<div class="field"><label>Amount ($ / ' + (f.fundedBy === "bonus" ? "check" : "month") + ')</label>' +
+          '<input type="number" step="25" min="0" class="f-amt"></div>') +
+        '</div>';
+
+      const progress = document.createElement("div");
+      progress.className = "derived";
+      function progressText() {
+        const p = computeCashFlow().fundPlan[idx];
+        if (!p) return "";
+        if (p.remaining <= 0) return "Funded &mdash; target reached";
+        const rate = fmt$(p.monthly) + " / month equivalent";
+        if (p.monthsToTarget === null) return rate + " &middot; no contribution set, never fills";
+        const when = new Date();
+        when.setMonth(when.getMonth() + p.monthsToTarget);
+        return rate + " &middot; " + fmt$(p.remaining) + " to go &middot; fills " +
+          when.toLocaleString("default", { month: "short", year: "numeric" });
+      }
+      function updateProgress() { progress.innerHTML = progressText(); }
+
+      const nameInput = row.querySelector(".f-name");
+      const targetInput = row.querySelector(".f-target");
+      const balanceInput = row.querySelector(".f-balance");
+      const modeSel = row.querySelector(".f-mode");
+      const fundedSel = row.querySelector(".f-funded");
+      const amtInput = row.querySelector(".f-amt");
+      nameInput.value = f.name;
+      targetInput.value = f.target;
+      balanceInput.value = f.balance;
+      modeSel.value = f.mode;
+      fundedSel.value = f.fundedBy;
+      if (amtInput) amtInput.value = f.contribution;
+
+      nameInput.addEventListener("input", function (e) { f.name = e.target.value; saveState(); });
+      [[targetInput, "target"], [balanceInput, "balance"]].forEach(function (pair) {
+        pair[0].addEventListener("input", function (e) {
+          f[pair[1]] = e.target.value === "" ? 0 : Number(e.target.value);
+          saveState();
+          updateProgress();
+          renderCashFlowTotalsOnly();
+        });
+      });
+      if (amtInput) {
+        amtInput.addEventListener("input", function (e) {
+          f.contribution = e.target.value === "" ? 0 : Number(e.target.value);
+          saveState();
+          updateProgress();
+          renderCashFlowTotalsOnly();
+        });
+      }
+      // Mode and source change the row's own controls, so these rebuild.
+      modeSel.addEventListener("change", function (e) { f.mode = e.target.value; saveState(); renderAll(); });
+      fundedSel.addEventListener("change", function (e) { f.fundedBy = e.target.value; saveState(); renderAll(); });
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn small danger";
+      removeBtn.type = "button";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", function () {
+        state.cashflow.sinkingFunds = state.cashflow.sinkingFunds.filter(function (x) { return x.id !== f.id; });
+        saveState();
+        renderAll();
+      });
+      row.appendChild(removeBtn);
+
+      updateProgress();
+      row.appendChild(progress);
+      listEl.appendChild(row);
+    });
+  }
+
   function renderCashFlow() {
     const c = state.cashflow;
     const cf = computeCashFlow();
@@ -3023,6 +3225,7 @@
 
     renderDeductionList();
     renderBillList();
+    renderSinkingFundList();
     renderCashFlowOutputs();
   }
 
@@ -3038,6 +3241,11 @@
       fmt$(cf.bonus.net) + " / " + BONUS_FREQ_LABELS[c.bonusFrequency] + " check";
 
     const cal = computeCashFlowCalendar();
+    document.getElementById("out-cf-sinkingMonthly").textContent = fmt$(cf.sinkingMonthlyTotal) + " / month";
+    document.getElementById("cf-sinking-note").textContent = cf.uncommittedAnnual < -0.5
+      ? "You've committed " + fmt$(-cf.uncommittedAnnual) + " / year more to sinking funds than your surplus supports."
+      : "Leaves " + fmt$(cf.uncommittedAnnual / 12) + " / month of surplus uncommitted.";
+
     document.getElementById("out-cf-bonusReserved").textContent = fmt$(cal.bonusReserved);
     document.getElementById("out-cf-bonusShortfall").textContent = fmt$(cal.bonusShortfall);
     document.getElementById("out-cf-minRegular").textContent = fmt$(cal.minRegularBalance);
@@ -3058,7 +3266,8 @@
       const tr = document.createElement("tr");
       tr.innerHTML = "<td>" + m.label + "</td><td>" + fmt$(m.regularIn) + "</td><td>" +
         (m.bonusIn ? fmt$(m.bonusIn) : "—") + "</td><td>" + fmt$(m.regularOut) + "</td><td>" +
-        (m.bonusOut ? fmt$(m.bonusOut) : "—") + "</td><td>" + fmt$(m.regularBalance) + "</td><td>" +
+        (m.bonusOut ? fmt$(m.bonusOut) : "—") + "</td><td>" +
+        (m.sinkingOut ? fmt$(m.sinkingOut) : "—") + "</td><td>" + fmt$(m.regularBalance) + "</td><td>" +
         fmt$(m.bonusBalance) + "</td><td>" + fmt$(m.combinedBalance) + "</td>";
       if (m.regularBalance < 0 || m.bonusBalance < 0) tr.style.color = "var(--bad)";
       body.appendChild(tr);
@@ -3133,6 +3342,8 @@
     document.getElementById("out-surplusMonthly").textContent = fmt$(out.monthlySurplus);
     document.getElementById("out-regularSurplusMonthly").textContent = fmt$(out.regularSurplusMonthly);
     document.getElementById("out-bonusLeftoverAnnual").textContent = fmt$(out.bonusLeftoverAnnual);
+    document.getElementById("out-sinkingMonthly").textContent = fmt$(out.sinkingMonthlyTotal);
+    document.getElementById("out-uncommittedMonthly").textContent = fmt$(out.uncommittedAnnual / 12);
     document.getElementById("out-regularSurplusNote").textContent = out.regularSurplusMonthly >= 0
       ? "Regular pay covers its own bills with " + fmt$(out.regularSurplusMonthly) + " / month left over."
       : "Regular pay falls " + fmt$(-out.regularSurplusMonthly) + " / month short of its own bills — the gap has to come from bonus money.";
