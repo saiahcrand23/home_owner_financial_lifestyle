@@ -617,7 +617,7 @@
 
       <div class="card">
         <h2>Budget</h2>
-        <p class="hint">Enter each bill at its own cadence &mdash; a $1,400 semi-annual premium is 1400, not 233.</p>
+        <p class="hint">Enter each bill at its own cadence &mdash; a $1,400 semi-annual premium is 1400, not 233. The pinned row is mortgage and PMI only, since those are always monthly; property tax, insurance, HOA and maintenance belong here as their own bills.</p>
         <div id="cf-bill-list"></div>
         <button class="btn" id="cf-add-bill" type="button">+ Add bill</button>
       </div>
@@ -680,7 +680,7 @@
 
       <div class="card">
         <h2>Monthly budget</h2>
-        <div class="stat"><span>Housing</span><span class="val" id="out-mb-housing"></span></div>
+        <div class="stat"><span>Mortgage &amp; PMI</span><span class="val" id="out-mb-housing"></span></div>
         <div class="stat"><span>Budgeted bills</span><span class="val" id="out-mb-bills"></span></div>
         <div class="stat"><span>Retirement</span><span class="val" id="out-mb-retirement"></span></div>
         <div class="stat"><span>Benefits + HSA</span><span class="val" id="out-mb-benefits"></span></div>
@@ -1063,7 +1063,8 @@
       housingOverrideActive: false,
       openingBalance: 0,
       sinkingFundId: 0,
-      sinkingFunds: []
+      sinkingFunds: [],
+      housingSplitMigrated: true
     },
     surplus: {
       allocation: {
@@ -1225,6 +1226,34 @@
     });
   }
 
+  // Pre-dates the housing bill narrowing to mortgage + PMI: the pinned row used
+  // to carry the whole housing cost. Silently dropping the other four
+  // components would overstate surplus, so seed them as their own bills at the
+  // same monthly amounts — total unchanged — for the user to re-cadence.
+  function migrateLegacyHousingSplit(target, source) {
+    if (!source || !Object.keys(source).length) return;
+    if (source.cashflow && source.cashflow.housingSplitMigrated) return;
+    target.cashflow.housingSplitMigrated = true;
+    // An override was already a bespoke figure standing in for whatever the
+    // user meant by "housing"; splitting it out would double-count.
+    if (target.cashflow.housingOverrideActive) return;
+    const h = computeHousing();
+    [
+      { name: "Property tax", amount: h.monthlyPropertyTax },
+      { name: "Home insurance", amount: h.monthlyInsurance },
+      { name: "HOA", amount: h.monthlyHOA },
+      { name: "Maintenance", amount: h.monthlyMaintenance }
+    ].forEach(function (seed) {
+      if (!(seed.amount > 0)) return;
+      target.cashflow.billId += 1;
+      target.cashflow.bills.push({
+        id: target.cashflow.billId, name: seed.name,
+        amount: Math.round(seed.amount * 100) / 100,
+        cadence: "monthly", fundedBy: "regular", dueMonths: []
+      });
+    });
+  }
+
   function loadState() {
     let saved = null;
     try {
@@ -1237,6 +1266,7 @@
     migrateLegacyBrokerage(state);
     migrateLegacyToCashFlow(state, saved);
     migrateLegacyContribDates(state);
+    migrateLegacyHousingSplit(state, saved);
     if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
   }
 
@@ -1706,10 +1736,14 @@
   // Buying tab unless overridden, so it is built here rather than stored.
   function housingBill() {
     const c = state.cashflow;
-    const calculated = computeHousing().totalMonthly;
+    const h = computeHousing();
+    // Only the two costs that are genuinely monthly and fixed. Property tax,
+    // insurance, HOA and maintenance are ordinary bills so they can carry their
+    // real cadence instead of being smoothed into a monthly average.
+    const calculated = h.pi + h.monthlyPMI;
     const amount = c.housingOverrideActive && c.housingOverride !== null && c.housingOverride !== ""
       ? Number(c.housingOverride) : calculated;
-    return { id: "housing", name: "Housing", amount: amount, cadence: "monthly", fundedBy: "regular", dueMonths: [], pinned: true, calculated: calculated };
+    return { id: "housing", name: "Mortgage & PMI", amount: amount, cadence: "monthly", fundedBy: "regular", dueMonths: [], pinned: true, calculated: calculated };
   }
 
   function allBills() {
@@ -3042,8 +3076,9 @@
         // Housing mirrors the Home Buying tab; typing here sets an override.
         const sub = document.createElement("div");
         sub.className = "field";
-        sub.innerHTML = '<div class="sub">Auto-filled from Home Buying: ' + fmt$(b.calculated) +
-          ' &middot; <button class="btn small" id="btn-reset-housing" type="button">Use calculated value</button></div>';
+        sub.innerHTML = '<div class="sub">Principal &amp; interest plus PMI, from Home Buying: ' + fmt$(b.calculated) +
+          ' &middot; <button class="btn small" id="btn-reset-housing" type="button">Use calculated value</button></div>' +
+          '<div class="sub">Property tax, insurance, HOA and maintenance are separate bills below &mdash; give them their real cadence.</div>';
         row.appendChild(sub);
         amtInput.addEventListener("input", function (e) {
           state.cashflow.housingOverrideActive = true;
@@ -3987,6 +4022,7 @@
           migrateLegacyBrokerage(state);
           migrateLegacyToCashFlow(state, imported);
           migrateLegacyContribDates(state);
+          migrateLegacyHousingSplit(state, imported);
           if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
           saveState();
           syncStaticFields();
