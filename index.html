@@ -1254,6 +1254,49 @@
     });
   }
 
+  // Sinking funds used to support a "whatever's left" contribution mode that
+  // split the regular/bonus remainder equally across all leftover-mode funds.
+  // That concept now lives only in Surplus (house payoff is its auto-
+  // remainder), so bake each leftover fund's implied share into a fixed
+  // dollar amount at upgrade time — otherwise it would silently drop to $0.
+  function migrateLegacySinkingFundMode(target) {
+    const funds = target.cashflow.sinkingFunds || [];
+    if (!funds.some(function (f) { return f.mode === "leftover"; })) return;
+
+    const bonusPerYear = BONUS_FREQ_PER_YEAR[target.cashflow.bonusFrequency] || 4;
+    const regular = netForSource(target.cashflow.grossRegularMonthly, target.cashflow.taxRateRegular, "regular");
+    const bonus = netForSource(target.cashflow.grossBonusAmount, target.cashflow.taxRateBonus, "bonus");
+    let regularBillsAnnual = 0, bonusBillsAnnual = 0;
+    allBills().forEach(function (b) {
+      if (b.fundedBy === "bonus") bonusBillsAnnual += billAnnual(b); else regularBillsAnnual += billAnnual(b);
+    });
+    const regularSurplusMonthly = regular.net - regularBillsAnnual / 12;
+    const bonusLeftoverAnnual = bonus.net * bonusPerYear - bonusBillsAnnual;
+
+    function fundHasRoom(f) {
+      const t = Number(f.target) || 0;
+      return t <= 0 || (Number(f.balance) || 0) < t;
+    }
+    let fixedRegularMonthly = 0, fixedBonusPerCheck = 0;
+    funds.forEach(function (f) {
+      if (f.mode === "leftover" || !fundHasRoom(f)) return;
+      const amt = Number(f.contribution) || 0;
+      if (f.fundedBy === "bonus") fixedBonusPerCheck += amt; else fixedRegularMonthly += amt;
+    });
+    const leftoverRegular = funds.filter(function (f) { return f.mode === "leftover" && f.fundedBy !== "bonus" && fundHasRoom(f); });
+    const leftoverBonus = funds.filter(function (f) { return f.mode === "leftover" && f.fundedBy === "bonus" && fundHasRoom(f); });
+    const regularRemainder = Math.max(regularSurplusMonthly - fixedRegularMonthly, 0);
+    const bonusRemainder = Math.max(bonusLeftoverAnnual - fixedBonusPerCheck * bonusPerYear, 0);
+    const leftoverRegularEach = leftoverRegular.length ? regularRemainder / leftoverRegular.length : 0;
+    const leftoverBonusEachPerCheck = leftoverBonus.length && bonusPerYear ? bonusRemainder / bonusPerYear / leftoverBonus.length : 0;
+
+    funds.forEach(function (f) {
+      if (f.mode !== "leftover") return;
+      f.contribution = fundHasRoom(f) ? (f.fundedBy === "bonus" ? leftoverBonusEachPerCheck : leftoverRegularEach) : 0;
+      delete f.mode;
+    });
+  }
+
   function loadState() {
     let saved = null;
     try {
@@ -1267,6 +1310,7 @@
     migrateLegacyToCashFlow(state, saved);
     migrateLegacyContribDates(state);
     migrateLegacyHousingSplit(state, saved);
+    migrateLegacySinkingFundMode(state);
     if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
   }
 
@@ -1802,32 +1846,24 @@
     // amounts are per bonus check, since that is how the money arrives.
     const funds = c.sinkingFunds || [];
     // A fund that has reached its target stops drawing; only funds with room
-    // left count toward the commitment or share the leftover pool.
+    // left count toward the commitment. "Whatever's left" is Surplus's job
+    // (house payoff is the auto-remainder there) — sinking funds are always a
+    // fixed amount, so they never compete with each other for a shared pool.
     function fundHasRoom(f) {
       const target = Number(f.target) || 0;
       return target <= 0 || (Number(f.balance) || 0) < target;
     }
     let fixedRegularMonthly = 0, fixedBonusPerCheck = 0;
     funds.forEach(function (f) {
-      if (f.mode === "leftover" || !fundHasRoom(f)) return;
+      if (!fundHasRoom(f)) return;
       const amt = Number(f.contribution) || 0;
       if (f.fundedBy === "bonus") fixedBonusPerCheck += amt; else fixedRegularMonthly += amt;
     });
-    // "Leftover" funds share whatever remains after the fixed ones, equally.
-    const leftoverRegular = funds.filter(function (f) { return f.mode === "leftover" && f.fundedBy !== "bonus" && fundHasRoom(f); });
-    const leftoverBonus = funds.filter(function (f) { return f.mode === "leftover" && f.fundedBy === "bonus" && fundHasRoom(f); });
-    const regularRemainder = Math.max(regularSurplusMonthly - fixedRegularMonthly, 0);
-    const bonusRemainder = Math.max(bonusLeftoverAnnual - fixedBonusPerCheck * bonusPerYear, 0);
-    const leftoverRegularEach = leftoverRegular.length ? regularRemainder / leftoverRegular.length : 0;
-    const leftoverBonusEachPerCheck = leftoverBonus.length && bonusPerYear
-      ? bonusRemainder / bonusPerYear / leftoverBonus.length : 0;
 
     // Per-fund monthly-equivalent contribution, for projections and the calendar.
     const fundPlan = funds.map(function (f) {
       const isBonus = f.fundedBy === "bonus";
-      const perOccurrence = !fundHasRoom(f) ? 0 : (f.mode === "leftover"
-        ? (isBonus ? leftoverBonusEachPerCheck : leftoverRegularEach)
-        : (Number(f.contribution) || 0));
+      const perOccurrence = fundHasRoom(f) ? (Number(f.contribution) || 0) : 0;
       const monthly = isBonus ? perOccurrence * bonusPerYear / 12 : perOccurrence;
       const target = Number(f.target) || 0;
       const balance = Number(f.balance) || 0;
@@ -1838,8 +1874,8 @@
         monthsToTarget: (monthly > 0 && remaining > 0) ? Math.ceil(remaining / monthly) : (remaining <= 0 ? 0 : null)
       };
     });
-    const sinkingRegularMonthly = fixedRegularMonthly + leftoverRegularEach * leftoverRegular.length;
-    const sinkingBonusAnnual = (fixedBonusPerCheck + leftoverBonusEachPerCheck * leftoverBonus.length) * bonusPerYear;
+    const sinkingRegularMonthly = fixedRegularMonthly;
+    const sinkingBonusAnnual = fixedBonusPerCheck * bonusPerYear;
     const sinkingMonthlyTotal = sinkingRegularMonthly + sinkingBonusAnnual / 12;
     const uncommittedRegularMonthly = regularSurplusMonthly - sinkingRegularMonthly;
     const uncommittedBonusAnnual = bonusLeftoverAnnual - sinkingBonusAnnual;
@@ -2388,7 +2424,7 @@
       state.cashflow.sinkingFundId += 1;
       state.cashflow.sinkingFunds.push({
         id: state.cashflow.sinkingFundId, name: "New fund", target: 0, balance: 0,
-        contribution: 0, mode: "fixed", fundedBy: "regular"
+        contribution: 0, fundedBy: "regular"
       });
       saveState();
       renderAll();
@@ -3157,7 +3193,6 @@
       const plan = plans[idx];
       const row = document.createElement("div");
       row.className = "bill-row";
-      const isLeftover = f.mode === "leftover";
 
       row.innerHTML =
         '<div class="field-row">' +
@@ -3166,14 +3201,10 @@
         '<div class="field"><label>Have now ($)</label><input type="number" step="100" min="0" class="f-balance"></div>' +
         '</div>' +
         '<div class="field-row">' +
-        '<div class="field"><label>Contribute</label><select class="f-mode">' +
-        '<option value="fixed">Fixed amount</option><option value="leftover">Whatever is left</option>' +
-        '</select></div>' +
         '<div class="field"><label>Funded by</label><select class="f-funded">' +
         '<option value="regular">Regular pay</option><option value="bonus">Bonus</option></select></div>' +
-        (isLeftover ? '' :
-          '<div class="field"><label>Amount ($ / ' + (f.fundedBy === "bonus" ? "check" : "month") + ')</label>' +
-          '<input type="number" step="25" min="0" class="f-amt"></div>') +
+        '<div class="field"><label>Amount ($ / ' + (f.fundedBy === "bonus" ? "check" : "month") + ')</label>' +
+        '<input type="number" step="25" min="0" class="f-amt"></div>' +
         '</div>';
 
       const progress = document.createElement("div");
@@ -3194,15 +3225,13 @@
       const nameInput = row.querySelector(".f-name");
       const targetInput = row.querySelector(".f-target");
       const balanceInput = row.querySelector(".f-balance");
-      const modeSel = row.querySelector(".f-mode");
       const fundedSel = row.querySelector(".f-funded");
       const amtInput = row.querySelector(".f-amt");
       nameInput.value = f.name;
       targetInput.value = f.target;
       balanceInput.value = f.balance;
-      modeSel.value = f.mode;
       fundedSel.value = f.fundedBy;
-      if (amtInput) amtInput.value = f.contribution;
+      amtInput.value = f.contribution;
 
       nameInput.addEventListener("input", function (e) { f.name = e.target.value; saveState(); });
       [[targetInput, "target"], [balanceInput, "balance"]].forEach(function (pair) {
@@ -3213,16 +3242,13 @@
           renderCashFlowTotalsOnly();
         });
       });
-      if (amtInput) {
-        amtInput.addEventListener("input", function (e) {
-          f.contribution = e.target.value === "" ? 0 : Number(e.target.value);
-          saveState();
-          updateProgress();
-          renderCashFlowTotalsOnly();
-        });
-      }
-      // Mode and source change the row's own controls, so these rebuild.
-      modeSel.addEventListener("change", function (e) { f.mode = e.target.value; saveState(); renderAll(); });
+      amtInput.addEventListener("input", function (e) {
+        f.contribution = e.target.value === "" ? 0 : Number(e.target.value);
+        saveState();
+        updateProgress();
+        renderCashFlowTotalsOnly();
+      });
+      // Source changes the row's own "amount per" label, so it rebuilds.
       fundedSel.addEventListener("change", function (e) { f.fundedBy = e.target.value; saveState(); renderAll(); });
 
       const removeBtn = document.createElement("button");
@@ -4023,6 +4049,7 @@
           migrateLegacyToCashFlow(state, imported);
           migrateLegacyContribDates(state);
           migrateLegacyHousingSplit(state, imported);
+          migrateLegacySinkingFundMode(state);
           if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
           saveState();
           syncStaticFields();
