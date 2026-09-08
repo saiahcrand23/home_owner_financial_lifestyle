@@ -623,15 +623,6 @@
       </div>
 
       <div class="card full-width">
-        <h2>Sinking funds</h2>
-        <p class="hint">Savings targets with no due date &mdash; home repairs, a future car, a vet fund. These are transfers, not bills: the money is still yours, so they don&rsquo;t reduce your surplus. They&rsquo;re reported as a commitment against it, and they do come out of your cash balance below.</p>
-        <div id="cf-fund-list"></div>
-        <button class="btn" id="cf-add-fund" type="button">+ Add sinking fund</button>
-        <div class="stat"><span>Monthly total</span><span class="val" id="out-cf-sinkingMonthly"></span></div>
-        <div class="note" id="cf-sinking-note"></div>
-      </div>
-
-      <div class="card full-width">
         <h2>12-month running balance</h2>
         <div class="field">
           <label>Cash on hand at the start of the cycle ($)</label>
@@ -645,11 +636,11 @@
         <div class="stat"><span>Lowest regular-only balance</span><span class="val" id="out-cf-minRegular"></span></div>
         <div class="stat"><span>Lowest bonus-only balance</span><span class="val" id="out-cf-minBonus"></span></div>
         <div class="stat"><span>Lowest cash balance</span><span class="val" id="out-cf-minCombined"></span></div>
-        <div class="note">Regular-only and bonus-only track bills alone, so they stay honest diagnostics. Cash balance is what&rsquo;s actually in the account: those two, minus sinking transfers.</div>
+        <div class="note">Regular-only and bonus-only track bills alone, so they stay honest diagnostics. Cash balance is what&rsquo;s actually in the account: those two combined.</div>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Month</th><th>Regular in</th><th>Bonus in</th><th>Regular bills</th><th>Bonus bills</th><th>Sinking</th><th>Regular-only balance</th><th>Bonus-only balance</th><th>Cash balance</th></tr>
+              <tr><th>Month</th><th>Regular in</th><th>Bonus in</th><th>Regular bills</th><th>Bonus bills</th><th>Regular-only balance</th><th>Bonus-only balance</th><th>Cash balance</th></tr>
             </thead>
             <tbody id="out-cf-calendar-body"></tbody>
           </table>
@@ -701,10 +692,6 @@
         <h3>By source</h3>
         <div class="stat"><span>Regular pay surplus / month</span><span class="val" id="out-regularSurplusMonthly"></span></div>
         <div class="stat"><span>Bonus leftover / year</span><span class="val" id="out-bonusLeftoverAnnual"></span></div>
-        <h3>Commitments</h3>
-        <div class="stat"><span>Sinking funds / month</span><span class="val" id="out-sinkingMonthly"></span></div>
-        <div class="stat total"><span>Uncommitted surplus / month</span><span class="val" id="out-uncommittedMonthly"></span></div>
-        <div class="note">Sinking funds are transfers, not spending, so they don&rsquo;t reduce surplus &mdash; the allocation below still divides the full amount. This line shows what&rsquo;s left after them, at today&rsquo;s contribution rate; the Cash Flow calendar shows funds filling up and freeing that money again.</div>
         <div class="note" id="out-regularSurplusNote"></div>
       </div>
 
@@ -721,18 +708,21 @@
             </div>
             <div id="alloc-regular-percent-fields">
               <div class="field"><label>Discretionary %</label><input type="number" id="ar-discretionaryPct" step="5" min="0" max="100"></div>
-              <div class="field"><label>Savings %</label><input type="number" id="ar-savingsPct" step="5" min="0" max="100"></div>
+              <div class="field"><label>Home savings %</label><input type="number" id="ar-homeSavingsPct" step="5" min="0" max="100"></div>
+              <div class="field"><label>Car savings %</label><input type="number" id="ar-carSavingsPct" step="5" min="0" max="100"></div>
               <div class="field"><label>Kids&rsquo; future %</label><input type="number" id="ar-kidsFuturePct" step="5" min="0" max="100"></div>
               <div class="field"><label>House payoff %</label><input type="number" id="ar-payoffPct" step="5" disabled><div class="sub">Auto-set to the remainder</div></div>
             </div>
             <div id="alloc-regular-dollar-fields">
               <div class="field"><label>Discretionary $ / month</label><input type="number" id="ar-discretionaryDollar" step="25"></div>
-              <div class="field"><label>Savings $ / month</label><input type="number" id="ar-savingsDollar" step="25"></div>
+              <div class="field"><label>Home savings $ / month</label><input type="number" id="ar-homeSavingsDollar" step="25"></div>
+              <div class="field"><label>Car savings $ / month</label><input type="number" id="ar-carSavingsDollar" step="25"></div>
               <div class="field"><label>Kids&rsquo; future $ / month</label><input type="number" id="ar-kidsFutureDollar" step="25"></div>
               <div class="field"><label>House payoff $ / month</label><input type="number" id="ar-payoffDollar" step="25" disabled><div class="sub">Auto-set to the remainder</div></div>
             </div>
             <div class="stat"><span>Discretionary</span><span class="val" id="out-ar-discretionary"></span></div>
-            <div class="stat"><span>Savings</span><span class="val" id="out-ar-savings"></span></div>
+            <div class="stat"><span>Home savings</span><span class="val" id="out-ar-homeSavings"></span></div>
+            <div class="stat"><span>Car savings</span><span class="val" id="out-ar-carSavings"></span></div>
             <div class="stat"><span>Kids&rsquo; future</span><span class="val" id="out-ar-kidsFuture"></span></div>
             <div class="stat"><span>House payoff</span><span class="val" id="out-ar-payoff"></span></div>
           </div>
@@ -745,18 +735,21 @@
             </div>
             <div id="alloc-bonus-percent-fields">
               <div class="field"><label>Discretionary %</label><input type="number" id="ab-discretionaryPct" step="5" min="0" max="100"></div>
-              <div class="field"><label>Savings %</label><input type="number" id="ab-savingsPct" step="5" min="0" max="100"></div>
+              <div class="field"><label>Home savings %</label><input type="number" id="ab-homeSavingsPct" step="5" min="0" max="100"></div>
+              <div class="field"><label>Car savings %</label><input type="number" id="ab-carSavingsPct" step="5" min="0" max="100"></div>
               <div class="field"><label>Kids&rsquo; future %</label><input type="number" id="ab-kidsFuturePct" step="5" min="0" max="100"></div>
               <div class="field"><label>House payoff %</label><input type="number" id="ab-payoffPct" step="5" disabled><div class="sub">Auto-set to the remainder</div></div>
             </div>
             <div id="alloc-bonus-dollar-fields">
               <div class="field"><label>Discretionary $ / year</label><input type="number" id="ab-discretionaryDollar" step="500"></div>
-              <div class="field"><label>Savings $ / year</label><input type="number" id="ab-savingsDollar" step="500"></div>
+              <div class="field"><label>Home savings $ / year</label><input type="number" id="ab-homeSavingsDollar" step="500"></div>
+              <div class="field"><label>Car savings $ / year</label><input type="number" id="ab-carSavingsDollar" step="500"></div>
               <div class="field"><label>Kids&rsquo; future $ / year</label><input type="number" id="ab-kidsFutureDollar" step="500"></div>
               <div class="field"><label>House payoff $ / year</label><input type="number" id="ab-payoffDollar" step="500" disabled><div class="sub">Auto-set to the remainder</div></div>
             </div>
             <div class="stat"><span>Discretionary</span><span class="val" id="out-ab-discretionary"></span></div>
-            <div class="stat"><span>Savings</span><span class="val" id="out-ab-savings"></span></div>
+            <div class="stat"><span>Home savings</span><span class="val" id="out-ab-homeSavings"></span></div>
+            <div class="stat"><span>Car savings</span><span class="val" id="out-ab-carSavings"></span></div>
             <div class="stat"><span>Kids&rsquo; future</span><span class="val" id="out-ab-kidsFuture"></span></div>
             <div class="stat"><span>House payoff</span><span class="val" id="out-ab-payoff"></span></div>
           </div>
@@ -764,7 +757,8 @@
         </div>
         <h3>Combined (annual)</h3>
         <div class="stat"><span>Discretionary / year</span><span class="val" id="out-vacationAnnual"></span></div>
-        <div class="stat"><span>Savings / year</span><span class="val" id="out-savingsAnnual"></span></div>
+        <div class="stat"><span>Home savings / year</span><span class="val" id="out-homeSavingsAnnual"></span></div>
+        <div class="stat"><span>Car savings / year</span><span class="val" id="out-carSavingsAnnual"></span></div>
         <div class="stat"><span>Kids&rsquo; future / year</span><span class="val" id="out-kidsFutureAnnual"></span></div>
         <div class="stat"><span>House payoff / year</span><span class="val" id="out-payoffAnnual"></span></div>
         <div class="note">House Payoff and Kids&rsquo; Future read these combined totals.</div>
@@ -1062,21 +1056,19 @@
       housingOverride: null,
       housingOverrideActive: false,
       openingBalance: 0,
-      sinkingFundId: 0,
-      sinkingFunds: [],
       housingSplitMigrated: true
     },
     surplus: {
       allocation: {
         regular: {
           mode: "percent",
-          discretionaryPct: 100, savingsPct: 0, kidsFuturePct: 0, payoffPct: 0,
-          discretionaryDollar: 0, savingsDollar: 0, kidsFutureDollar: 0
+          discretionaryPct: 100, homeSavingsPct: 0, carSavingsPct: 0, kidsFuturePct: 0, payoffPct: 0,
+          discretionaryDollar: 0, homeSavingsDollar: 0, carSavingsDollar: 0, kidsFutureDollar: 0
         },
         bonus: {
           mode: "dollar",
-          discretionaryPct: 50, savingsPct: 0, kidsFuturePct: 0, payoffPct: 50,
-          discretionaryDollar: 1500, savingsDollar: 0, kidsFutureDollar: 0
+          discretionaryPct: 50, homeSavingsPct: 0, carSavingsPct: 0, kidsFuturePct: 0, payoffPct: 50,
+          discretionaryDollar: 1500, homeSavingsDollar: 0, carSavingsDollar: 0, kidsFutureDollar: 0
         }
       }
     },
@@ -1198,11 +1190,11 @@
     const b = target.surplus.allocation.bonus;
     if (old.splitMode !== undefined) b.mode = old.splitMode;
     if (old.vacationPct !== undefined) b.discretionaryPct = old.vacationPct;
-    if (old.savingsPct !== undefined) b.savingsPct = old.savingsPct;
+    if (old.savingsPct !== undefined) b.homeSavingsPct = old.savingsPct;
     if (old.kidsFuturePct !== undefined) b.kidsFuturePct = old.kidsFuturePct;
     if (old.payoffPct !== undefined) b.payoffPct = old.payoffPct;
     if (old.vacationDollar !== undefined) b.discretionaryDollar = old.vacationDollar;
-    if (old.savingsDollar !== undefined) b.savingsDollar = old.savingsDollar;
+    if (old.savingsDollar !== undefined) b.homeSavingsDollar = old.savingsDollar;
     if (old.kidsFutureDollar !== undefined) b.kidsFutureDollar = old.kidsFutureDollar;
 
     ["grossRegularMonthly", "titheRegular", "grossBonusAmount", "bonusFrequency", "titheBonus",
@@ -1254,46 +1246,20 @@
     });
   }
 
-  // Sinking funds used to support a "whatever's left" contribution mode that
-  // split the regular/bonus remainder equally across all leftover-mode funds.
-  // That concept now lives only in Surplus (house payoff is its auto-
-  // remainder), so bake each leftover fund's implied share into a fixed
-  // dollar amount at upgrade time — otherwise it would silently drop to $0.
-  function migrateLegacySinkingFundMode(target) {
-    const funds = target.cashflow.sinkingFunds || [];
-    if (!funds.some(function (f) { return f.mode === "leftover"; })) return;
-
-    const bonusPerYear = BONUS_FREQ_PER_YEAR[target.cashflow.bonusFrequency] || 4;
-    const regular = netForSource(target.cashflow.grossRegularMonthly, target.cashflow.taxRateRegular, "regular");
-    const bonus = netForSource(target.cashflow.grossBonusAmount, target.cashflow.taxRateBonus, "bonus");
-    let regularBillsAnnual = 0, bonusBillsAnnual = 0;
-    allBills().forEach(function (b) {
-      if (b.fundedBy === "bonus") bonusBillsAnnual += billAnnual(b); else regularBillsAnnual += billAnnual(b);
-    });
-    const regularSurplusMonthly = regular.net - regularBillsAnnual / 12;
-    const bonusLeftoverAnnual = bonus.net * bonusPerYear - bonusBillsAnnual;
-
-    function fundHasRoom(f) {
-      const t = Number(f.target) || 0;
-      return t <= 0 || (Number(f.balance) || 0) < t;
-    }
-    let fixedRegularMonthly = 0, fixedBonusPerCheck = 0;
-    funds.forEach(function (f) {
-      if (f.mode === "leftover" || !fundHasRoom(f)) return;
-      const amt = Number(f.contribution) || 0;
-      if (f.fundedBy === "bonus") fixedBonusPerCheck += amt; else fixedRegularMonthly += amt;
-    });
-    const leftoverRegular = funds.filter(function (f) { return f.mode === "leftover" && f.fundedBy !== "bonus" && fundHasRoom(f); });
-    const leftoverBonus = funds.filter(function (f) { return f.mode === "leftover" && f.fundedBy === "bonus" && fundHasRoom(f); });
-    const regularRemainder = Math.max(regularSurplusMonthly - fixedRegularMonthly, 0);
-    const bonusRemainder = Math.max(bonusLeftoverAnnual - fixedBonusPerCheck * bonusPerYear, 0);
-    const leftoverRegularEach = leftoverRegular.length ? regularRemainder / leftoverRegular.length : 0;
-    const leftoverBonusEachPerCheck = leftoverBonus.length && bonusPerYear ? bonusRemainder / bonusPerYear / leftoverBonus.length : 0;
-
-    funds.forEach(function (f) {
-      if (f.mode !== "leftover") return;
-      f.contribution = fundHasRoom(f) ? (f.fundedBy === "bonus" ? leftoverBonusEachPerCheck : leftoverRegularEach) : 0;
-      delete f.mode;
+  // Surplus's single "Savings" bucket split into "Home savings" and "Car
+  // savings". Existing savingsPct/savingsDollar map entirely onto Home
+  // savings (car starts at 0) rather than silently vanishing.
+  function migrateLegacySavingsSplit(target) {
+    ["regular", "bonus"].forEach(function (which) {
+      const block = target.surplus.allocation[which];
+      if (block.savingsPct !== undefined) {
+        block.homeSavingsPct = block.savingsPct;
+        delete block.savingsPct;
+      }
+      if (block.savingsDollar !== undefined) {
+        block.homeSavingsDollar = block.savingsDollar;
+        delete block.savingsDollar;
+      }
     });
   }
 
@@ -1310,7 +1276,7 @@
     migrateLegacyToCashFlow(state, saved);
     migrateLegacyContribDates(state);
     migrateLegacyHousingSplit(state, saved);
-    migrateLegacySinkingFundMode(state);
+    migrateLegacySavingsSplit(state);
     if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
   }
 
@@ -1840,46 +1806,6 @@
     const regularSurplusMonthly = regular.net - regularBillsAnnual / 12;
     const bonusLeftoverAnnual = netBonusAnnual - bonusBillsAnnual;
 
-    // Sinking funds are transfers, not expenses — the money is still yours, so
-    // they sit outside the surplus calculation and are reported as a
-    // commitment against it. Regular-funded amounts are per month; bonus-funded
-    // amounts are per bonus check, since that is how the money arrives.
-    const funds = c.sinkingFunds || [];
-    // A fund that has reached its target stops drawing; only funds with room
-    // left count toward the commitment. "Whatever's left" is Surplus's job
-    // (house payoff is the auto-remainder there) — sinking funds are always a
-    // fixed amount, so they never compete with each other for a shared pool.
-    function fundHasRoom(f) {
-      const target = Number(f.target) || 0;
-      return target <= 0 || (Number(f.balance) || 0) < target;
-    }
-    let fixedRegularMonthly = 0, fixedBonusPerCheck = 0;
-    funds.forEach(function (f) {
-      if (!fundHasRoom(f)) return;
-      const amt = Number(f.contribution) || 0;
-      if (f.fundedBy === "bonus") fixedBonusPerCheck += amt; else fixedRegularMonthly += amt;
-    });
-
-    // Per-fund monthly-equivalent contribution, for projections and the calendar.
-    const fundPlan = funds.map(function (f) {
-      const isBonus = f.fundedBy === "bonus";
-      const perOccurrence = fundHasRoom(f) ? (Number(f.contribution) || 0) : 0;
-      const monthly = isBonus ? perOccurrence * bonusPerYear / 12 : perOccurrence;
-      const target = Number(f.target) || 0;
-      const balance = Number(f.balance) || 0;
-      const remaining = Math.max(target - balance, 0);
-      return {
-        fund: f, isBonus: isBonus, perOccurrence: perOccurrence, monthly: monthly,
-        target: target, balance: balance, remaining: remaining,
-        monthsToTarget: (monthly > 0 && remaining > 0) ? Math.ceil(remaining / monthly) : (remaining <= 0 ? 0 : null)
-      };
-    });
-    const sinkingRegularMonthly = fixedRegularMonthly;
-    const sinkingBonusAnnual = fixedBonusPerCheck * bonusPerYear;
-    const sinkingMonthlyTotal = sinkingRegularMonthly + sinkingBonusAnnual / 12;
-    const uncommittedRegularMonthly = regularSurplusMonthly - sinkingRegularMonthly;
-    const uncommittedBonusAnnual = bonusLeftoverAnnual - sinkingBonusAnnual;
-
     const grossMonthlyCombined = c.grossRegularMonthly + (c.grossBonusAmount * bonusPerYear) / 12;
     const netMonthlyCombined = regular.net + netBonusAnnual / 12;
 
@@ -1905,13 +1831,7 @@
       bonusLeftoverAnnual: bonusLeftoverAnnual,
       grossMonthlyCombined: grossMonthlyCombined, netMonthlyCombined: netMonthlyCombined,
       titheMonthly: titheMonthly, retirementDollar: retirementDollar, benefitsMonthly: benefitsMonthly,
-      taxAnnual: taxAnnual, housingCost: bills[0].amount,
-      fundPlan: fundPlan,
-      sinkingRegularMonthly: sinkingRegularMonthly, sinkingBonusAnnual: sinkingBonusAnnual,
-      sinkingMonthlyTotal: sinkingMonthlyTotal,
-      uncommittedRegularMonthly: uncommittedRegularMonthly,
-      uncommittedBonusAnnual: uncommittedBonusAnnual,
-      uncommittedAnnual: uncommittedRegularMonthly * 12 + uncommittedBonusAnnual
+      taxAnnual: taxAnnual, housingCost: bills[0].amount
     };
   }
 
@@ -1930,10 +1850,6 @@
     // it seeds the bonus line — and the combined line inherits it from there,
     // keeping combined === regular + bonus.
     let regularBal = 0, bonusBal = opening, cashBal = opening;
-    // Funds stop receiving once they hit target, so a fund that fills in month
-    // five stops draining cash for the rest of the year.
-    const fundBalances = cf.fundPlan.map(function (p) { return p.balance; });
-    let sinkingCumulative = 0;
     for (let m = 1; m <= 12; m++) {
       let regularOut = 0, bonusOut = 0;
       cf.bills.forEach(function (b) {
@@ -1942,29 +1858,16 @@
         if (b.fundedBy === "bonus") bonusOut += perHit; else regularOut += perHit;
       });
       const bonusIn = bonusMonths.indexOf(m) !== -1 ? cf.bonus.net : 0;
-      let sinkingOut = 0;
-      cf.fundPlan.forEach(function (plan, i) {
-        // Bonus-funded transfers only happen in months a bonus actually lands.
-        let amt = plan.isBonus ? (bonusMonths.indexOf(m) !== -1 ? plan.perOccurrence : 0) : plan.monthly;
-        if (plan.target > 0) amt = Math.min(amt, Math.max(0, plan.target - fundBalances[i]));
-        fundBalances[i] += amt;
-        sinkingOut += amt;
-      });
-      sinkingCumulative += sinkingOut;
 
-      // The regular-only and bonus-only lines stay bills-only: they diagnose
-      // whether income covers obligations. A sinking transfer is discretionary
-      // — you'd skip it in a tight month — so counting it there would report a
-      // saving habit as a shortfall.
       regularBal += cf.regular.net - regularOut;
       bonusBal += bonusIn - bonusOut;
-      cashBal += cf.regular.net + bonusIn - regularOut - bonusOut - sinkingOut;
+      cashBal += cf.regular.net + bonusIn - regularOut - bonusOut;
       months.push({
         month: m, label: MONTH_LABELS[m - 1],
         regularIn: cf.regular.net, bonusIn: bonusIn,
-        regularOut: regularOut, bonusOut: bonusOut, sinkingOut: sinkingOut,
+        regularOut: regularOut, bonusOut: bonusOut,
         regularBalance: regularBal, bonusBalance: bonusBal,
-        combinedBalance: cashBal, sinkingCumulative: sinkingCumulative
+        combinedBalance: cashBal
       });
     }
     const worstRegular = months.reduce(function (lo, x) { return Math.min(lo, x.regularBalance); }, Infinity);
@@ -1984,22 +1887,24 @@
     };
   }
 
-  // Splits one pool across the four destinations. House payoff is always the
+  // Splits one pool across the five destinations. House payoff is always the
   // auto-set remainder, as it was before the regular/bonus split.
   function allocatePool(block, pool) {
-    let discretionary, savings, kidsFuture;
+    let discretionary, homeSavings, carSavings, kidsFuture;
     if (block.mode === "percent") {
       discretionary = pool * ((block.discretionaryPct || 0) / 100);
-      savings = pool * ((block.savingsPct || 0) / 100);
+      homeSavings = pool * ((block.homeSavingsPct || 0) / 100);
+      carSavings = pool * ((block.carSavingsPct || 0) / 100);
       kidsFuture = pool * ((block.kidsFuturePct || 0) / 100);
     } else {
       discretionary = Number(block.discretionaryDollar) || 0;
-      savings = Number(block.savingsDollar) || 0;
+      homeSavings = Number(block.homeSavingsDollar) || 0;
+      carSavings = Number(block.carSavingsDollar) || 0;
       kidsFuture = Number(block.kidsFutureDollar) || 0;
     }
     return {
-      pool: pool, discretionary: discretionary, savings: savings, kidsFuture: kidsFuture,
-      payoff: pool - discretionary - savings - kidsFuture
+      pool: pool, discretionary: discretionary, homeSavings: homeSavings, carSavings: carSavings, kidsFuture: kidsFuture,
+      payoff: pool - discretionary - homeSavings - carSavings - kidsFuture
     };
   }
 
@@ -2016,7 +1921,8 @@
     // Downstream tabs (House Payoff, Kids' Future) read these combined annual
     // totals, so they keep working untouched across the split.
     const vacationAnnual = regularAlloc.discretionary * 12 + bonusAlloc.discretionary;
-    const savingsAnnual = regularAlloc.savings * 12 + bonusAlloc.savings;
+    const homeSavingsAnnual = regularAlloc.homeSavings * 12 + bonusAlloc.homeSavings;
+    const carSavingsAnnual = regularAlloc.carSavings * 12 + bonusAlloc.carSavings;
     const kidsFutureAnnual = regularAlloc.kidsFuture * 12 + bonusAlloc.kidsFuture;
     const payoffAnnual = regularAlloc.payoff * 12 + bonusAlloc.payoff;
 
@@ -2030,13 +1936,8 @@
       totalMonthlyBudget: totalMonthlyBudget,
       annualSurplus: annualSurplus, quarterlySurplus: annualSurplus / 4, monthlySurplus: annualSurplus / 12,
       regularSurplusMonthly: cf.regularSurplusMonthly, bonusLeftoverAnnual: cf.bonusLeftoverAnnual,
-      sinkingMonthlyTotal: cf.sinkingMonthlyTotal, sinkingRegularMonthly: cf.sinkingRegularMonthly,
-      sinkingBonusAnnual: cf.sinkingBonusAnnual,
-      uncommittedRegularMonthly: cf.uncommittedRegularMonthly,
-      uncommittedBonusAnnual: cf.uncommittedBonusAnnual,
-      uncommittedAnnual: cf.uncommittedAnnual,
       regularAlloc: regularAlloc, bonusAlloc: bonusAlloc,
-      vacationAnnual: vacationAnnual, savingsAnnual: savingsAnnual,
+      vacationAnnual: vacationAnnual, homeSavingsAnnual: homeSavingsAnnual, carSavingsAnnual: carSavingsAnnual,
       kidsFutureAnnual: kidsFutureAnnual, payoffAnnual: payoffAnnual,
       // Payoff needs the steady and lumpy halves kept apart for amortization.
       payoffMonthlyRegular: regularAlloc.payoff, payoffAnnualBonus: bonusAlloc.payoff,
@@ -2420,16 +2321,6 @@
       renderAll();
     });
 
-    document.getElementById("cf-add-fund").addEventListener("click", function () {
-      state.cashflow.sinkingFundId += 1;
-      state.cashflow.sinkingFunds.push({
-        id: state.cashflow.sinkingFundId, name: "New fund", target: 0, balance: 0,
-        contribution: 0, fundedBy: "regular"
-      });
-      saveState();
-      renderAll();
-    });
-
     document.getElementById("cf-add-bill").addEventListener("click", function () {
       state.cashflow.billId += 1;
       state.cashflow.bills.push({
@@ -2455,7 +2346,7 @@
       document.getElementById(prefix + "-" + key + "Pct").addEventListener("input", function (e) {
         const block = state.surplus.allocation[which];
         block[key + "Pct"] = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-        block.payoffPct = 100 - block.discretionaryPct - block.savingsPct - block.kidsFuturePct;
+        block.payoffPct = 100 - block.discretionaryPct - block.homeSavingsPct - block.carSavingsPct - block.kidsFuturePct;
         saveState();
         renderAll();
       });
@@ -2466,7 +2357,7 @@
         function (v) { state.surplus.allocation[which][key + "Dollar"] = v; });
     }
     [["ar", "regular"], ["ab", "bonus"]].forEach(function (pair) {
-      ["discretionary", "savings", "kidsFuture"].forEach(function (key) {
+      ["discretionary", "homeSavings", "carSavings", "kidsFuture"].forEach(function (key) {
         bindAllocPct(pair[0], pair[1], key);
         bindAllocDollar(pair[0], pair[1], key);
       });
@@ -3180,94 +3071,6 @@
     });
   }
 
-  function renderSinkingFundList() {
-    const funds = state.cashflow.sinkingFunds;
-    const listEl = document.getElementById("cf-fund-list");
-    const plans = computeCashFlow().fundPlan;
-    listEl.innerHTML = "";
-    if (!funds.length) {
-      listEl.innerHTML = '<p class="empty-msg">No sinking funds yet</p>';
-      return;
-    }
-    funds.forEach(function (f, idx) {
-      const plan = plans[idx];
-      const row = document.createElement("div");
-      row.className = "bill-row";
-
-      row.innerHTML =
-        '<div class="field-row">' +
-        '<div class="field"><label>Name</label><input type="text" class="f-name"></div>' +
-        '<div class="field"><label>Target ($)</label><input type="number" step="500" min="0" class="f-target"></div>' +
-        '<div class="field"><label>Have now ($)</label><input type="number" step="100" min="0" class="f-balance"></div>' +
-        '</div>' +
-        '<div class="field-row">' +
-        '<div class="field"><label>Funded by</label><select class="f-funded">' +
-        '<option value="regular">Regular pay</option><option value="bonus">Bonus</option></select></div>' +
-        '<div class="field"><label>Amount ($ / ' + (f.fundedBy === "bonus" ? "check" : "month") + ')</label>' +
-        '<input type="number" step="25" min="0" class="f-amt"></div>' +
-        '</div>';
-
-      const progress = document.createElement("div");
-      progress.className = "derived";
-      function progressText() {
-        const p = computeCashFlow().fundPlan[idx];
-        if (!p) return "";
-        if (p.remaining <= 0) return "Funded &mdash; target reached";
-        const rate = fmt$(p.monthly) + " / month equivalent";
-        if (p.monthsToTarget === null) return rate + " &middot; no contribution set, never fills";
-        const when = new Date();
-        when.setMonth(when.getMonth() + p.monthsToTarget);
-        return rate + " &middot; " + fmt$(p.remaining) + " to go &middot; fills " +
-          when.toLocaleString("default", { month: "short", year: "numeric" });
-      }
-      function updateProgress() { progress.innerHTML = progressText(); }
-
-      const nameInput = row.querySelector(".f-name");
-      const targetInput = row.querySelector(".f-target");
-      const balanceInput = row.querySelector(".f-balance");
-      const fundedSel = row.querySelector(".f-funded");
-      const amtInput = row.querySelector(".f-amt");
-      nameInput.value = f.name;
-      targetInput.value = f.target;
-      balanceInput.value = f.balance;
-      fundedSel.value = f.fundedBy;
-      amtInput.value = f.contribution;
-
-      nameInput.addEventListener("input", function (e) { f.name = e.target.value; saveState(); });
-      [[targetInput, "target"], [balanceInput, "balance"]].forEach(function (pair) {
-        pair[0].addEventListener("input", function (e) {
-          f[pair[1]] = e.target.value === "" ? 0 : Number(e.target.value);
-          saveState();
-          updateProgress();
-          renderCashFlowTotalsOnly();
-        });
-      });
-      amtInput.addEventListener("input", function (e) {
-        f.contribution = e.target.value === "" ? 0 : Number(e.target.value);
-        saveState();
-        updateProgress();
-        renderCashFlowTotalsOnly();
-      });
-      // Source changes the row's own "amount per" label, so it rebuilds.
-      fundedSel.addEventListener("change", function (e) { f.fundedBy = e.target.value; saveState(); renderAll(); });
-
-      const removeBtn = document.createElement("button");
-      removeBtn.className = "btn small danger";
-      removeBtn.type = "button";
-      removeBtn.textContent = "Remove";
-      removeBtn.addEventListener("click", function () {
-        state.cashflow.sinkingFunds = state.cashflow.sinkingFunds.filter(function (x) { return x.id !== f.id; });
-        saveState();
-        renderAll();
-      });
-      row.appendChild(removeBtn);
-
-      updateProgress();
-      row.appendChild(progress);
-      listEl.appendChild(row);
-    });
-  }
-
   function renderCashFlow() {
     const c = state.cashflow;
     const cf = computeCashFlow();
@@ -3286,7 +3089,6 @@
 
     renderDeductionList();
     renderBillList();
-    renderSinkingFundList();
     renderCashFlowOutputs();
   }
 
@@ -3302,11 +3104,6 @@
       fmt$(cf.bonus.net) + " / " + BONUS_FREQ_LABELS[c.bonusFrequency] + " check";
 
     const cal = computeCashFlowCalendar();
-    document.getElementById("out-cf-sinkingMonthly").textContent = fmt$(cf.sinkingMonthlyTotal) + " / month";
-    document.getElementById("cf-sinking-note").textContent = cf.uncommittedAnnual < -0.5
-      ? "You've committed " + fmt$(-cf.uncommittedAnnual) + " / year more to sinking funds than your surplus supports."
-      : "Leaves " + fmt$(cf.uncommittedAnnual / 12) + " / month of surplus uncommitted.";
-
     document.getElementById("out-cf-bonusReserved").textContent = fmt$(cal.bonusReserved);
     document.getElementById("out-cf-bonusShortfall").textContent = fmt$(cal.bonusShortfall);
     document.getElementById("out-cf-minRegular").textContent = fmt$(cal.minRegularBalance);
@@ -3327,8 +3124,7 @@
       const tr = document.createElement("tr");
       tr.innerHTML = "<td>" + m.label + "</td><td>" + fmt$(m.regularIn) + "</td><td>" +
         (m.bonusIn ? fmt$(m.bonusIn) : "—") + "</td><td>" + fmt$(m.regularOut) + "</td><td>" +
-        (m.bonusOut ? fmt$(m.bonusOut) : "—") + "</td><td>" +
-        (m.sinkingOut ? fmt$(m.sinkingOut) : "—") + "</td><td>" + fmt$(m.regularBalance) + "</td><td>" +
+        (m.bonusOut ? fmt$(m.bonusOut) : "—") + "</td><td>" + fmt$(m.regularBalance) + "</td><td>" +
         fmt$(m.bonusBalance) + "</td><td>" + fmt$(m.combinedBalance) + "</td>";
       if (m.regularBalance < 0 || m.bonusBalance < 0) tr.style.color = "var(--bad)";
       body.appendChild(tr);
@@ -3360,11 +3156,13 @@
     document.getElementById("alloc-" + which + "-dollar-fields").style.display = block.mode === "dollar" ? "block" : "none";
 
     setInputValue(prefix + "-discretionaryPct", block.discretionaryPct);
-    setInputValue(prefix + "-savingsPct", block.savingsPct);
+    setInputValue(prefix + "-homeSavingsPct", block.homeSavingsPct);
+    setInputValue(prefix + "-carSavingsPct", block.carSavingsPct);
     setInputValue(prefix + "-kidsFuturePct", block.kidsFuturePct);
     setInputValue(prefix + "-payoffPct", block.payoffPct);
     setInputValue(prefix + "-discretionaryDollar", block.discretionaryDollar);
-    setInputValue(prefix + "-savingsDollar", block.savingsDollar);
+    setInputValue(prefix + "-homeSavingsDollar", block.homeSavingsDollar);
+    setInputValue(prefix + "-carSavingsDollar", block.carSavingsDollar);
     setInputValue(prefix + "-kidsFutureDollar", block.kidsFutureDollar);
     setInputValue(prefix + "-payoffDollar", Math.round(alloc.payoff));
 
@@ -3373,7 +3171,8 @@
       return perMonth ? fmt$(v) + " / mo · " + fmt$(v * 12) + " / yr" : fmt$(v) + suffix;
     }
     document.getElementById("out-" + prefix + "-discretionary").textContent = label(alloc.discretionary);
-    document.getElementById("out-" + prefix + "-savings").textContent = label(alloc.savings);
+    document.getElementById("out-" + prefix + "-homeSavings").textContent = label(alloc.homeSavings);
+    document.getElementById("out-" + prefix + "-carSavings").textContent = label(alloc.carSavings);
     document.getElementById("out-" + prefix + "-kidsFuture").textContent = label(alloc.kidsFuture);
     document.getElementById("out-" + prefix + "-payoff").textContent = label(alloc.payoff);
   }
@@ -3403,8 +3202,6 @@
     document.getElementById("out-surplusMonthly").textContent = fmt$(out.monthlySurplus);
     document.getElementById("out-regularSurplusMonthly").textContent = fmt$(out.regularSurplusMonthly);
     document.getElementById("out-bonusLeftoverAnnual").textContent = fmt$(out.bonusLeftoverAnnual);
-    document.getElementById("out-sinkingMonthly").textContent = fmt$(out.sinkingMonthlyTotal);
-    document.getElementById("out-uncommittedMonthly").textContent = fmt$(out.uncommittedAnnual / 12);
     document.getElementById("out-regularSurplusNote").textContent = out.regularSurplusMonthly >= 0
       ? "Regular pay covers its own bills with " + fmt$(out.regularSurplusMonthly) + " / month left over."
       : "Regular pay falls " + fmt$(-out.regularSurplusMonthly) + " / month short of its own bills — the gap has to come from bonus money.";
@@ -3415,7 +3212,8 @@
     renderAllocBlock("bonus", "ab", state.surplus.allocation.bonus, out.bonusAlloc, false);
 
     document.getElementById("out-vacationAnnual").textContent = fmt$(out.vacationAnnual);
-    document.getElementById("out-savingsAnnual").textContent = fmt$(out.savingsAnnual);
+    document.getElementById("out-homeSavingsAnnual").textContent = fmt$(out.homeSavingsAnnual);
+    document.getElementById("out-carSavingsAnnual").textContent = fmt$(out.carSavingsAnnual);
     document.getElementById("out-kidsFutureAnnual").textContent = fmt$(out.kidsFutureAnnual);
     document.getElementById("out-payoffAnnual").textContent = fmt$(out.payoffAnnual);
   }
@@ -4049,7 +3847,7 @@
           migrateLegacyToCashFlow(state, imported);
           migrateLegacyContribDates(state);
           migrateLegacyHousingSplit(state, imported);
-          migrateLegacySinkingFundMode(state);
+          migrateLegacySavingsSplit(state);
           if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
           saveState();
           syncStaticFields();
