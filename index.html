@@ -230,11 +230,11 @@
   .bill-row { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--bg); }
   .bill-row .field { margin-bottom: 8px; }
   .bill-row.pinned { opacity: 1; }
-  .ded-row { display: grid; grid-template-columns: 1.4fr 0.9fr 0.9fr 1fr; gap: 8px; align-items: end; margin-bottom: 8px; }
-  .ded-row .ded-name { font-size: 0.82rem; color: var(--text); padding-bottom: 9px; }
-  .ded-row .ded-static { font-size: 0.78rem; color: var(--text-dim); padding-bottom: 9px; }
-  .ded-row .field { margin-bottom: 0; }
-  @media (max-width: 620px) { .ded-row { grid-template-columns: 1fr 1fr; } }
+  .ded-row { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--bg); }
+  .ded-row .ded-name { font-size: 0.85rem; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  .ded-row .field-row { flex-wrap: wrap; }
+  .ded-row .field { flex: 1 1 110px; margin-bottom: 0; }
+  .ded-row .ded-static { padding: 8px 0; font-size: 0.92rem; color: var(--text-dim); }
   .empty-msg { font-size: 0.85rem; color: var(--text-dim); text-align: center; padding: 14px 0; }
 
   #g-loans-wrap, #g-emerg-wrap, #g-house-wrap, #g-hysa-wrap { display: none; }
@@ -2909,15 +2909,17 @@
       const treatmentEditable = key === "benefits";
       row.innerHTML =
         '<div class="ded-name">' + DEDUCTION_LABELS[key] + '</div>' +
+        '<div class="field-row">' +
         '<div class="field"><label>' + (isPercent ? "%" : "$ / month") + '</label>' +
         '<input type="number" class="ded-amt" step="' + (isPercent ? "0.5" : "10") + '" min="0"></div>' +
         (treatmentEditable
           ? '<div class="field"><label>Treatment</label><select class="ded-treatment">' +
             '<option value="pre">Pre-tax</option><option value="post">Post-tax</option></select></div>'
-          : '<div class="ded-static">' + (d.taxTreatment === "pre" ? "Pre-tax" : "Post-tax") + '</div>') +
+          : '<div class="field"><label>Treatment</label><div class="ded-static">' + (d.taxTreatment === "pre" ? "Pre-tax" : "Post-tax") + '</div></div>') +
         '<div class="field"><label>Applies to</label><select class="ded-applies">' +
         '<option value="regular">Regular</option><option value="bonus">Bonus</option><option value="both">Both</option>' +
-        '</select></div>';
+        '</select></div>' +
+        '</div>';
 
       const amt = row.querySelector(".ded-amt");
       amt.value = d.amount;
