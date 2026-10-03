@@ -236,6 +236,13 @@
   .ded-row .field { flex: 1 1 110px; margin-bottom: 0; }
   .ded-row .ded-static { padding: 8px 0; font-size: 0.92rem; color: var(--text-dim); }
   .empty-msg { font-size: 0.85rem; color: var(--text-dim); text-align: center; padding: 14px 0; }
+  .g-pri-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; background: var(--bg); }
+  .g-pri-num {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 999px;
+    background: var(--accent-dim); color: var(--accent); font-size: 0.78rem; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .g-pri-name { flex: 1; font-size: 0.88rem; color: var(--text); }
 
   #g-loans-wrap, #g-emerg-wrap, #g-house-wrap, #g-hysa-wrap { display: none; }
   #g-loans-wrap.on, #g-emerg-wrap.on, #g-house-wrap.on, #g-hysa-wrap.on { display: block; }
@@ -385,7 +392,7 @@
 
       <div class="card full-width">
         <h2>Additional goals</h2>
-        <p class="hint">Add as many extra goals as you want &mdash; a new car, additional emergency savings, whatever. These come last in the priority order, so money earmarked for loans, the emergency fund, and the house down payment above is never diverted to them; each additional goal only receives cash that's still left over after the goals before it (including earlier additional goals) are fully funded. Use the &uarr; / &darr; buttons to reorder them &mdash; the order here sets their priority and goal number in the timeline below.</p>
+        <p class="hint">Add as many extra goals as you want &mdash; a new car, additional emergency savings, whatever. Name them and give them a target here; set where each one fits relative to loans, the emergency fund, and the house down payment in Priority Order below.</p>
         <div id="g-custom-goal-list"></div>
         <button class="btn" id="g-add-custom-goal" type="button">+ Add goal</button>
       </div>
@@ -404,8 +411,14 @@
       </div>
 
       <div class="card full-width">
+        <h2>Priority order</h2>
+        <p class="hint">Every enabled goal above &mdash; loans, the emergency fund, the house down payment, and your additional goals &mdash; funds in this order. Each goal only ever receives cash still left over once every goal above it is fully funded (or, for loans, fully paid off), so money committed to an earlier goal is never diverted to a later one. Use the &uarr; / &darr; buttons to move debt or the down payment goal anywhere in the list, including after one or more additional goals. A goal you disable above keeps its place here for whenever you turn it back on.</p>
+        <div id="g-priority-list"></div>
+      </div>
+
+      <div class="card full-width">
         <h2>Timeline</h2>
-        <p class="hint">Simulates month by month: loans first, then emergency fund, then house down payment, then any additional goals in the order you added them &mdash; using the contribution rules above.</p>
+        <p class="hint">Simulates month by month in the priority order set above, using the contribution rules at the top of this page.</p>
         <button class="btn primary" id="g-calculate" type="button">Calculate my timeline</button>
         <div id="g-result-area"></div>
       </div>
@@ -985,6 +998,11 @@
       loanId: 1,
       contribId: 7,
       customGoalId: 0,
+      // Priority order for ALL goals, built-in and custom — tokens are
+      // "loans" / "emerg" / "house" / "custom:<id>". Disabled built-ins keep
+      // their slot (re-enabling restores position); filtering to what's
+      // actually active happens at compute time.
+      order: ["loans", "emerg", "house"],
       loans: [
         { id: 1, bal: "37717", rate: "6.39", minPay: "393.00" }
       ],
@@ -1263,6 +1281,29 @@
     });
   }
 
+  // Pre-dates letting debt/e-fund/house share one reorderable priority list
+  // with custom goals — old saves/exports have no goals.order at all, so
+  // DEFAULTS already seeds ["loans","emerg","house"] via deepMerge. This only
+  // needs to backfill custom goal tokens (in their existing array order, so
+  // priority is unchanged) and drop tokens for goals that no longer exist.
+  function migrateLegacyGoalsOrder(target) {
+    const g = target.goals;
+    if (!Array.isArray(g.order)) g.order = ["loans", "emerg", "house"];
+    ["loans", "emerg", "house"].forEach(function (tok) {
+      if (g.order.indexOf(tok) === -1) g.order.push(tok);
+    });
+    g.customGoals.forEach(function (cg) {
+      const tok = "custom:" + cg.id;
+      if (g.order.indexOf(tok) === -1) g.order.push(tok);
+    });
+    const validCustomIds = {};
+    g.customGoals.forEach(function (cg) { validCustomIds[cg.id] = true; });
+    g.order = g.order.filter(function (tok) {
+      if (tok.indexOf("custom:") === 0) return !!validCustomIds[Number(tok.slice(7))];
+      return tok === "loans" || tok === "emerg" || tok === "house";
+    });
+  }
+
   function loadState() {
     let saved = null;
     try {
@@ -1277,6 +1318,7 @@
     migrateLegacyContribDates(state);
     migrateLegacyHousingSplit(state, saved);
     migrateLegacySavingsSplit(state);
+    migrateLegacyGoalsOrder(state);
     if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
   }
 
@@ -1408,6 +1450,23 @@
 
   // Pure simulation — returns { error } on invalid input, otherwise a result
   // object describing each enabled goal's phase (rendered separately).
+  // A goal token is "loans" / "emerg" / "house" (built-ins, gated on their
+  // checkbox) or "custom:<id>" (gated on that goal still existing).
+  function goalTokenEnabled(tok) {
+    const g = state.goals;
+    if (tok === "loans") return g.loansEnabled;
+    if (tok === "emerg") return g.emergEnabled;
+    if (tok === "house") return g.houseEnabled;
+    return g.customGoals.some(function (cg) { return "custom:" + cg.id === tok; });
+  }
+
+  // state.goals.order holds every goal, including disabled ones (so
+  // re-enabling a goal restores its old priority slot) — this is the live
+  // subset that actually runs, in priority order.
+  function enabledGoalOrder() {
+    return (state.goals.order || []).filter(goalTokenEnabled);
+  }
+
   function computeGoalsTimeline() {
     const g = state.goals;
 
@@ -1435,23 +1494,25 @@
     const houseGoal = g.houseEnabled ? (parseFloat(effectiveHouseGoal) || 0) : 0;
     const apy = g.hysaEnabled ? (parseFloat(g.apy) || 0) : 0;
 
-    // Goals funded after loans + emergency fund, in strict priority order —
-    // house first (if enabled), then each additional goal in the order it
-    // was added. Each only ever sees cash left over once every phase before
-    // it is fully funded, so money reserved for loans/e-fund/house can never
-    // be diverted to an additional goal.
-    const postPhases = [];
-    if (g.houseEnabled) {
-      postPhases.push({ isHouse: true, name: "House down payment", label: "Down Pmt", goal: houseGoal });
-    }
-    g.customGoals.forEach(function (cg) {
-      const target = parseFloat(cg.target) || 0;
-      const name = (cg.name || "").trim() || "Additional goal";
-      postPhases.push({ isHouse: false, name: name, label: name, goal: target });
+    // Every enabled goal — built-in and custom — runs as one phase in a
+    // single priority queue, in whatever order the Priority Order list above
+    // sets. Each phase only ever sees cash once every phase before it is
+    // fully funded (or, for loans, fully paid off), so money committed to an
+    // earlier goal can never be diverted to a later one.
+    const phases = enabledGoalOrder().map(function (tok) {
+      if (tok === "loans") return { type: "loans", name: "Loan payoff" };
+      if (tok === "emerg") return { type: "emerg", name: "Emergency fund", goal: emergGoal };
+      if (tok === "house") return { type: "house", name: "House down payment", goal: houseGoal };
+      const id = Number(tok.slice(7));
+      const cg = g.customGoals.find(function (c) { return c.id === id; });
+      const target = cg ? (parseFloat(cg.target) || 0) : 0;
+      const name = cg && (cg.name || "").trim() ? cg.name.trim() : "Additional goal";
+      return { type: "custom", name: name, goal: target };
     });
-    postPhases.forEach(function (p) {
+    phases.forEach(function (p) {
       p.monthCount = 0; p.interest = 0; p.finalBal = 0; p.finalDate = null;
       p.goalDate = null; p.goalMonthCount = 0; p.goalBal = 0; p.excess = 0;
+      p.totalInterest = 0; p.totalPayments = 0;
     });
 
     let simStart = null;
@@ -1465,14 +1526,12 @@
     const cashMap = goalsBuildCashMap(g.contribs, simStart, simEnd);
 
     let remainingBalances = loanData.map(function (l) { return { rem: l.balance, rate: l.rate, minPay: l.minPay }; });
-    let hysaBal = 0;
-    let totalLoanInterest = 0, totalLoanPayments = 0;
+    // Uncommitted savings, shared across every phase — whatever one phase
+    // doesn't need (because its goal is met, or loans are paid off) rolls
+    // straight into funding whichever phase is next.
+    let pool = 0;
     let minCoverageWarning = false;
-    let loanPhaseEnd = null, loanMonthCount = 0;
-    let emergPhaseEnd = null, emergMonthCount = 0, emergInterest = 0, emergReachedBal = 0, emergExcess = 0;
-    let emergDone = !g.emergEnabled || !emergGoal;
-    let loansDone = !g.loansEnabled || loanData.every(function (l) { return l.balance <= 0; });
-    let postPhaseIdx = 0;
+    let phaseIdx = 0;
 
     let cur = new Date(simStart);
     let monthIdx = 0;
@@ -1485,105 +1544,90 @@
       if (d > lastCashMonth) lastCashMonth = d;
     });
 
-    while (monthIdx < MAX) {
+    while (monthIdx < MAX && phaseIdx < phases.length) {
       const k = goalsMonthKey(cur);
       let cashLeft = cashMap.get(k) || 0;
-      let loanJustDone = false, emergJustDone = false;
+      const phase = phases[phaseIdx];
 
-      if (!loansDone) {
+      if (phase.type === "loans") {
+        // Savings rolled forward from an earlier goal are uncommitted —
+        // apply them as a lump sum the moment loans become the active phase.
+        if (pool > 0) { cashLeft += pool; pool = 0; }
         const totalMin = remainingBalances.reduce(function (s, l) { return l.rem > 0 ? s + Math.min(l.minPay, l.rem) : s; }, 0);
         if (cashLeft < totalMin) minCoverageWarning = true;
         remainingBalances.forEach(function (l) {
           if (l.rem <= 0) return;
           const interest = l.rem * (l.rate / 100 / 12);
-          l.rem += interest; totalLoanInterest += interest;
+          l.rem += interest; phase.totalInterest += interest;
           const pay = Math.min(l.minPay, l.rem);
           l.rem = Math.max(0, l.rem - pay);
-          totalLoanPayments += pay;
+          phase.totalPayments += pay;
           cashLeft = Math.max(0, cashLeft - pay);
         });
         remainingBalances.forEach(function (l) {
           if (l.rem <= 0 || cashLeft <= 0) return;
           const pay = Math.min(cashLeft, l.rem);
           l.rem = Math.max(0, l.rem - pay);
-          totalLoanPayments += pay;
+          phase.totalPayments += pay;
           cashLeft -= pay;
         });
+        phase.monthCount++;
         if (remainingBalances.every(function (l) { return l.rem <= 0.005; })) {
-          loansDone = true;
-          loanJustDone = true;
-          loanPhaseEnd = goalsFmtDate(cur);
-          loanMonthCount = monthIdx;
-          hysaBal += Math.max(0, cashLeft);
-          cashLeft = 0;
+          phase.finalDate = goalsFmtDate(cur);
+          phase.goalDate = phase.finalDate;
+          pool += Math.max(0, cashLeft);
+          phaseIdx++;
         }
-      }
-
-      if (loansDone && !loanJustDone && !emergDone) {
-        hysaBal += cashLeft; cashLeft = 0;
-        const int = goalsHysaInt(hysaBal, apy, cur.getFullYear(), cur.getMonth());
-        hysaBal += int; emergInterest += int;
-        emergMonthCount++;
-        if (hysaBal >= emergGoal) {
-          emergDone = true;
-          emergJustDone = true;
-          emergPhaseEnd = goalsFmtDate(cur);
-          emergReachedBal = hysaBal;
-          emergExcess = hysaBal - emergGoal;
-          hysaBal = emergExcess;
-        }
-      }
-
-      if (loansDone && !loanJustDone && emergDone && !emergJustDone && postPhaseIdx < postPhases.length) {
-        const phase = postPhases[postPhaseIdx];
-        hysaBal += cashLeft; cashLeft = 0;
-        const int = goalsHysaInt(hysaBal, apy, cur.getFullYear(), cur.getMonth());
-        hysaBal += int; phase.interest += int;
-        phase.finalBal = hysaBal;
+      } else {
+        pool += cashLeft;
+        const int = goalsHysaInt(pool, apy, cur.getFullYear(), cur.getMonth());
+        pool += int; phase.interest += int;
+        phase.finalBal = pool;
         phase.finalDate = goalsFmtDate(cur);
         phase.monthCount++;
-        if (phase.goal > 0 && hysaBal >= phase.goal && !phase.goalDate) {
+        if (phase.goal > 0 && pool >= phase.goal && !phase.goalDate) {
           phase.goalDate = goalsFmtDate(cur);
           phase.goalMonthCount = phase.monthCount;
-          phase.goalBal = hysaBal;
-          phase.excess = hysaBal - phase.goal;
-          hysaBal = phase.excess;
-          postPhaseIdx++;
+          phase.goalBal = pool;
+          phase.excess = pool - phase.goal;
+          pool = phase.excess;
+          phaseIdx++;
         }
       }
 
       monthIdx++;
       cur = goalsAddMonths(cur, 1);
-      if (loansDone && emergDone) {
-        if (postPhases.length === 0) break;
-        if (postPhaseIdx >= postPhases.length) break;
-        if (cur > lastCashMonth) break;
-      }
-      if (monthIdx >= MAX) break;
+      if (phaseIdx >= phases.length) break;
+      if (cur > lastCashMonth) break;
     }
 
-    if (g.loansEnabled && !loansDone) return { error: "Contributions aren't enough to pay off the loans within 50 years. Increase contribution amounts or required payments." };
-    if (g.emergEnabled && emergGoal > 0 && !emergDone) return { error: "Emergency fund goal not reached within the contribution window. Add more contributions or extend their end dates." };
+    const loansPhase = phases.find(function (p) { return p.type === "loans"; });
+    const emergPhase = phases.find(function (p) { return p.type === "emerg"; });
+    if (loansPhase && !loansPhase.goalDate) return { error: "Contributions aren't enough to pay off the loans within 50 years. Increase contribution amounts or required payments." };
+    if (emergPhase && emergPhase.goal > 0 && !emergPhase.goalDate) return { error: "Emergency fund goal not reached within the contribution window. Add more contributions or extend their end dates." };
 
-    const showLoans = g.loansEnabled && loanData.some(function (l) { return l.balance > 0; });
-    const showEmerg = g.emergEnabled && emergGoal > 0;
     let gn = 1;
-    const loanGn = showLoans ? gn++ : null;
-    const emergGn = showEmerg ? gn++ : null;
-    postPhases.forEach(function (p) { p.gn = gn++; });
+    phases.forEach(function (p) { p.gn = gn++; });
 
     const CUSTOM_TL_CLASSES = ["g-tl-custom1", "g-tl-custom2", "g-tl-custom3"];
     const CUSTOM_PHASE_CLASSES = ["g-phase-custom1", "g-phase-custom2", "g-phase-custom3"];
     let customColorIdx = 0;
-    postPhases.forEach(function (p) {
-      if (p.isHouse) {
-        p.tlCls = "g-tl-house";
-        p.phaseCls = "g-phase-house";
-      } else {
+    phases.forEach(function (p) {
+      if (p.type === "loans") { p.tlCls = "g-tl-loan"; p.phaseCls = "g-phase-loan"; }
+      else if (p.type === "emerg") { p.tlCls = "g-tl-emerg"; p.phaseCls = "g-phase-emerg"; }
+      else if (p.type === "house") { p.tlCls = "g-tl-house"; p.phaseCls = "g-phase-house"; }
+      else {
         p.tlCls = CUSTOM_TL_CLASSES[customColorIdx % CUSTOM_TL_CLASSES.length];
         p.phaseCls = CUSTOM_PHASE_CLASSES[customColorIdx % CUSTOM_PHASE_CLASSES.length];
         customColorIdx++;
       }
+      // Loans and the emergency fund always have a hard target (debt paid
+      // off, or the e-fund goal) and are guaranteed done here or we'd have
+      // errored out above; house/custom goals can be goal-less (just track
+      // savings growth with no finish line).
+      p.hasTarget = (p.type === "house" || p.type === "custom") ? p.goal > 0 : true;
+      p.reached = p.hasTarget ? !!p.goalDate : null;
+      p.dateLabel = p.hasTarget ? p.goalDate : p.finalDate;
     });
 
     // One row per goal for the stepped timeline — each row's fill spans its
@@ -1592,28 +1636,12 @@
     // proportionally-sized boxes the way a single stacked bar would.
     const timelineRows = [];
     let cum = 0;
-    if (showLoans) {
-      timelineRows.push({
-        gn: loanGn, name: "Loan payoff", cls: "g-tl-loan", monthCount: loanMonthCount,
-        start: cum, end: cum + loanMonthCount, dateLabel: loanPhaseEnd, reached: true
-      });
-      cum += loanMonthCount;
-    }
-    if (showEmerg) {
-      timelineRows.push({
-        gn: emergGn, name: "Emergency fund", cls: "g-tl-emerg", monthCount: emergMonthCount,
-        start: cum, end: cum + emergMonthCount, dateLabel: emergPhaseEnd, reached: true
-      });
-      cum += emergMonthCount;
-    }
-    postPhases.forEach(function (p) {
+    phases.forEach(function (p) {
       const count = p.monthCount || 0;
-      const hasTarget = p.goal > 0;
       timelineRows.push({
-        gn: p.gn, name: p.isHouse ? "House down payment" : p.name, cls: p.tlCls, monthCount: count,
+        gn: p.gn, name: p.name, cls: p.tlCls, monthCount: count,
         start: cum, end: cum + count,
-        dateLabel: hasTarget ? p.goalDate : p.finalDate,
-        reached: hasTarget ? !!p.goalDate : null, hasTarget: hasTarget
+        dateLabel: p.dateLabel, reached: p.reached, hasTarget: p.hasTarget
       });
       cum += count;
     });
@@ -1622,12 +1650,8 @@
     return {
       error: null, warning: minCoverageWarning,
       timelineRows: timelineRows, timelineTotal: timelineTotal,
-      showLoans: showLoans, showEmerg: showEmerg,
-      loanGn: loanGn, emergGn: emergGn,
-      loanPhaseEnd: loanPhaseEnd, loanMonthCount: loanMonthCount, totalLoanInterest: totalLoanInterest, totalLoanPayments: totalLoanPayments,
-      emergGoal: emergGoal, emergPhaseEnd: emergPhaseEnd, emergMonthCount: emergMonthCount, emergReachedBal: emergReachedBal, emergInterest: emergInterest, emergExcess: emergExcess,
       apy: apy,
-      postPhases: postPhases
+      phases: phases
     };
   }
 
@@ -2273,6 +2297,7 @@
     document.getElementById("g-add-custom-goal").addEventListener("click", function () {
       state.goals.customGoalId += 1;
       state.goals.customGoals.push({ id: state.goals.customGoalId, name: "", target: "" });
+      state.goals.order.push("custom:" + state.goals.customGoalId);
       saveState();
       renderAll();
     });
@@ -2449,6 +2474,7 @@
     renderGoalsLoanList();
     renderGoalsContribList();
     renderGoalsCustomGoalList();
+    renderGoalsPriorityList();
   }
 
   // Field-level edits inside these rows only update state + saveState() —
@@ -2520,50 +2546,14 @@
 
       const header = card.querySelector(".subcard-header");
 
-      const moveUpBtn = document.createElement("button");
-      moveUpBtn.className = "btn small";
-      moveUpBtn.type = "button";
-      moveUpBtn.textContent = "↑";
-      moveUpBtn.title = "Move up (higher priority)";
-      moveUpBtn.disabled = i === 0;
-      moveUpBtn.addEventListener("click", function () {
-        const arr = state.goals.customGoals;
-        const idx = arr.findIndex(function (x) { return x.id === cg.id; });
-        if (idx > 0) {
-          const tmp = arr[idx - 1];
-          arr[idx - 1] = arr[idx];
-          arr[idx] = tmp;
-          saveState();
-          renderAll();
-        }
-      });
-      header.appendChild(moveUpBtn);
-
-      const moveDownBtn = document.createElement("button");
-      moveDownBtn.className = "btn small";
-      moveDownBtn.type = "button";
-      moveDownBtn.textContent = "↓";
-      moveDownBtn.title = "Move down (lower priority)";
-      moveDownBtn.disabled = i === customGoals.length - 1;
-      moveDownBtn.addEventListener("click", function () {
-        const arr = state.goals.customGoals;
-        const idx = arr.findIndex(function (x) { return x.id === cg.id; });
-        if (idx > -1 && idx < arr.length - 1) {
-          const tmp = arr[idx + 1];
-          arr[idx + 1] = arr[idx];
-          arr[idx] = tmp;
-          saveState();
-          renderAll();
-        }
-      });
-      header.appendChild(moveDownBtn);
-
       const removeBtn = document.createElement("button");
       removeBtn.className = "btn small danger";
       removeBtn.type = "button";
       removeBtn.textContent = "Remove";
       removeBtn.addEventListener("click", function () {
         state.goals.customGoals = state.goals.customGoals.filter(function (x) { return x.id !== cg.id; });
+        const tok = "custom:" + cg.id;
+        state.goals.order = state.goals.order.filter(function (x) { return x !== tok; });
         saveState();
         renderAll();
       });
@@ -2577,6 +2567,83 @@
       targetInput.addEventListener("input", function (e) { cg.target = e.target.value; saveState(); });
 
       listEl.appendChild(card);
+    });
+  }
+
+  // Human-readable label for a goal token, used by the priority list.
+  function goalTokenLabel(tok) {
+    const g = state.goals;
+    if (tok === "loans") return "Loan payoff";
+    if (tok === "emerg") {
+      const amt = Number(g.emergGoal) || 0;
+      return "Emergency fund" + (amt > 0 ? " (" + fmt$(amt) + ")" : "");
+    }
+    if (tok === "house") {
+      const amt = g.houseGoalOverrideActive && g.houseGoal !== null && g.houseGoal !== ""
+        ? Number(g.houseGoal) : computeHousing().totalCashToClose;
+      return "House down payment" + (amt > 0 ? " (" + fmt$(amt) + ")" : "");
+    }
+    const id = Number(tok.slice(7));
+    const cg = g.customGoals.find(function (c) { return c.id === id; });
+    return cg && (cg.name || "").trim() ? cg.name.trim() : "Additional goal";
+  }
+
+  // Swaps two tokens' raw positions in goals.order, wherever they actually
+  // sit — any disabled goals interleaved between them are left untouched.
+  function swapGoalOrderTokens(tokA, tokB) {
+    const order = state.goals.order;
+    const iA = order.indexOf(tokA), iB = order.indexOf(tokB);
+    if (iA === -1 || iB === -1) return;
+    const tmp = order[iA];
+    order[iA] = order[iB];
+    order[iB] = tmp;
+  }
+
+  function renderGoalsPriorityList() {
+    const listEl = document.getElementById("g-priority-list");
+    const visible = enabledGoalOrder();
+    listEl.innerHTML = "";
+    if (!visible.length) {
+      listEl.innerHTML = '<p class="empty-msg">Enable at least one goal above to set its priority</p>';
+      return;
+    }
+    visible.forEach(function (tok, i) {
+      const row = document.createElement("div");
+      row.className = "g-pri-row";
+
+      const num = document.createElement("div");
+      num.className = "g-pri-num";
+      num.textContent = i + 1;
+
+      const name = document.createElement("div");
+      name.className = "g-pri-name";
+      name.textContent = goalTokenLabel(tok);
+
+      const upBtn = document.createElement("button");
+      upBtn.className = "btn small";
+      upBtn.type = "button";
+      upBtn.textContent = "↑";
+      upBtn.title = "Move up (higher priority)";
+      upBtn.disabled = i === 0;
+      upBtn.addEventListener("click", function () {
+        if (i > 0) { swapGoalOrderTokens(visible[i], visible[i - 1]); saveState(); renderAll(); }
+      });
+
+      const downBtn = document.createElement("button");
+      downBtn.className = "btn small";
+      downBtn.type = "button";
+      downBtn.textContent = "↓";
+      downBtn.title = "Move down (lower priority)";
+      downBtn.disabled = i === visible.length - 1;
+      downBtn.addEventListener("click", function () {
+        if (i < visible.length - 1) { swapGoalOrderTokens(visible[i], visible[i + 1]); saveState(); renderAll(); }
+      });
+
+      row.appendChild(num);
+      row.appendChild(name);
+      row.appendChild(upBtn);
+      row.appendChild(downBtn);
+      listEl.appendChild(row);
     });
   }
 
@@ -2765,43 +2832,55 @@
     });
     resultArea.appendChild(tlList);
 
-    if (result.showLoans) {
-      resultArea.appendChild(buildGoalsPhaseBlock({
-        cls: "g-phase-loan",
-        title: "✓ Goal " + result.loanGn + " — All loans paid off",
-        date: result.loanPhaseEnd,
-        sub: result.loanMonthCount + " month" + (result.loanMonthCount === 1 ? "" : "s"),
-        stats: [
-          { val: fmt$(result.totalLoanInterest), lbl: "Total interest paid" },
-          { val: fmt$(result.totalLoanPayments), lbl: "Total payments made" }
-        ]
-      }));
+    // "after X" phrasing matches whatever phase actually precedes this one —
+    // loans/emerg get their old fixed lowercase phrasing, house/custom name
+    // themselves, since any goal can now precede any other.
+    function afterPhaseText(prevPhase) {
+      if (!prevPhase) return "";
+      if (prevPhase.type === "loans") return " after loan payoff";
+      if (prevPhase.type === "emerg") return " after emergency fund";
+      return " after " + prevPhase.name;
     }
 
-    if (result.showEmerg) {
-      resultArea.appendChild(buildGoalsPhaseBlock({
-        cls: "g-phase-emerg",
-        title: "✓ Goal " + result.emergGn + " — " + fmt$(result.emergGoal) + " emergency fund reached",
-        date: result.emergPhaseEnd,
-        sub: result.emergMonthCount + " month" + (result.emergMonthCount === 1 ? "" : "s") + " of saving" + (result.showLoans ? " after loan payoff" : ""),
-        stats: [
-          { val: fmt$(result.emergReachedBal), lbl: "Balance when goal hit" },
-          { val: fmt$(result.emergInterest), lbl: "HYSA interest earned" },
-          { val: (result.apy ? result.apy.toFixed(2) + "%" : "—") + " APY", lbl: "Daily compounding" }
-        ]
-      }));
-    }
+    let cumulativeHysaInterest = 0;
+    result.phases.forEach(function (phase, i) {
+      const prevPhase = i > 0 ? result.phases[i - 1] : null;
 
-    let cumulativeHysaInterest = result.emergInterest;
-    (result.postPhases || []).forEach(function (phase, i) {
-      const icon = phase.isHouse ? "⌂" : "★";
-      const prevPhase = i > 0 ? result.postPhases[i - 1] : null;
-      const afterText = i === 0
-        ? (result.showEmerg ? " after emergency fund" : result.showLoans ? " after loan payoff" : "")
-        : " after " + prevPhase.name;
-      const excessFromPrev = i === 0
-        ? (result.showEmerg && result.emergExcess > 0 ? { val: fmt$(result.emergExcess), lbl: "Excess from E-Fund" } : null)
-        : (prevPhase.excess > 0 ? { val: fmt$(prevPhase.excess), lbl: "Excess from " + prevPhase.name } : null);
+      if (phase.type === "loans") {
+        resultArea.appendChild(buildGoalsPhaseBlock({
+          cls: "g-phase-loan",
+          title: "✓ Goal " + phase.gn + " — All loans paid off",
+          date: phase.goalDate,
+          sub: phase.monthCount + " month" + (phase.monthCount === 1 ? "" : "s") + afterPhaseText(prevPhase),
+          stats: [
+            { val: fmt$(phase.totalInterest), lbl: "Total interest paid" },
+            { val: fmt$(phase.totalPayments), lbl: "Total payments made" }
+          ]
+        }));
+        return;
+      }
+
+      if (phase.type === "emerg") {
+        cumulativeHysaInterest += phase.interest;
+        resultArea.appendChild(buildGoalsPhaseBlock({
+          cls: "g-phase-emerg",
+          title: "✓ Goal " + phase.gn + " — " + fmt$(phase.goal) + " emergency fund reached",
+          date: phase.goalDate,
+          sub: phase.goalMonthCount + " month" + (phase.goalMonthCount === 1 ? "" : "s") + " of saving" + afterPhaseText(prevPhase),
+          stats: [
+            { val: fmt$(phase.goalBal), lbl: "Balance when goal hit" },
+            { val: fmt$(phase.interest), lbl: "HYSA interest earned" },
+            { val: (result.apy ? result.apy.toFixed(2) + "%" : "—") + " APY", lbl: "Daily compounding" }
+          ]
+        }));
+        return;
+      }
+
+      // house or custom
+      const icon = phase.type === "house" ? "⌂" : "★";
+      const excessFromPrev = prevPhase && prevPhase.excess > 0
+        ? { val: fmt$(prevPhase.excess), lbl: "Excess from " + (prevPhase.type === "emerg" ? "E-Fund" : prevPhase.name) }
+        : null;
       cumulativeHysaInterest += phase.interest;
 
       if (phase.goal > 0) {
@@ -2812,7 +2891,7 @@
         ];
         if (excessFromPrev) stats.push(excessFromPrev);
         stats.push({ val: fmt$(cumulativeHysaInterest), lbl: "Total HYSA interest" });
-        const targetLabel = phase.isHouse
+        const targetLabel = phase.type === "house"
           ? (fmt$(phase.goal) + " down payment")
           : (fmt$(phase.goal) + " for " + phase.name);
         resultArea.appendChild(buildGoalsPhaseBlock({
@@ -2820,21 +2899,20 @@
           title: icon + " Goal " + phase.gn + " — " + targetLabel + (hitIt ? " reached" : " (not yet reached)"),
           date: hitIt ? phase.goalDate : "—",
           sub: hitIt
-            ? (phase.goalMonthCount + " month" + (phase.goalMonthCount === 1 ? "" : "s") + " of saving" + afterText)
+            ? (phase.goalMonthCount + " month" + (phase.goalMonthCount === 1 ? "" : "s") + " of saving" + afterPhaseText(prevPhase))
             : "Target not reached within your planned contributions",
           stats: stats
         }));
       } else {
         const bal = phase.finalBal > 0 ? phase.finalBal : 0;
-        const dateFallback = i === 0 ? (result.showEmerg ? result.emergPhaseEnd : result.loanPhaseEnd) : (prevPhase.goalDate || prevPhase.finalDate);
-        const asOfDate = phase.finalDate || dateFallback;
+        const asOfDate = phase.finalDate || (prevPhase && (prevPhase.goalDate || prevPhase.finalDate));
         const stats = [];
         if (excessFromPrev) stats.push(excessFromPrev);
         stats.push({ val: fmt$(phase.interest), lbl: "HYSA interest earned" });
         stats.push({ val: fmt$(cumulativeHysaInterest), lbl: "Total HYSA interest" });
         resultArea.appendChild(buildGoalsPhaseBlock({
           cls: phase.phaseCls,
-          title: icon + " Goal " + phase.gn + " — " + (phase.isHouse ? "House Down Payment" : phase.name),
+          title: icon + " Goal " + phase.gn + " — " + (phase.type === "house" ? "House Down Payment" : phase.name),
           date: fmt$(bal),
           sub: "HYSA balance as of " + asOfDate + " · " + phase.monthCount + " month" + (phase.monthCount === 1 ? "" : "s") + " of saving",
           stats: stats
@@ -3850,6 +3928,7 @@
           migrateLegacyContribDates(state);
           migrateLegacyHousingSplit(state, imported);
           migrateLegacySavingsSplit(state);
+          migrateLegacyGoalsOrder(state);
           if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
           saveState();
           syncStaticFields();
