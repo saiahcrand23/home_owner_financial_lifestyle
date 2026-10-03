@@ -2538,13 +2538,17 @@
       const card = document.createElement("div");
       card.className = "subcard";
       card.innerHTML =
-        '<div class="subcard-header"><span class="title">Goal ' + (i + 1) + '</span></div>' +
+        '<div class="subcard-header"><span class="title"></span></div>' +
         '<div class="field-row">' +
         '<div class="field"><label>Name</label><input type="text" maxlength="60" placeholder="e.g. New Car" class="g-cg-name"></div>' +
         '<div class="field"><label>Target amount ($)</label><input type="number" step="100" min="0" placeholder="Leave blank to just track savings" class="g-cg-target"></div>' +
         '</div>';
 
       const header = card.querySelector(".subcard-header");
+      // Set as text, not markup — the name is whatever the user typed.
+      const titleEl = card.querySelector(".subcard-header .title");
+      function syncTitle() { titleEl.textContent = (cg.name || "").trim() || "Goal " + (i + 1); }
+      syncTitle();
 
       const removeBtn = document.createElement("button");
       removeBtn.className = "btn small danger";
@@ -2563,8 +2567,19 @@
       const targetInput = card.querySelector(".g-cg-target");
       nameInput.value = cg.name;
       targetInput.value = cg.target;
-      nameInput.addEventListener("input", function (e) { cg.name = e.target.value; saveState(); });
-      targetInput.addEventListener("input", function (e) { cg.target = e.target.value; saveState(); });
+      // Rebuilding this row mid-type would steal focus, so the card's own
+      // title updates in place and only the priority list — which holds no
+      // inputs — is re-rendered.
+      nameInput.addEventListener("input", function (e) {
+        cg.name = e.target.value;
+        saveState();
+        syncTitle();
+        renderGoalsPriorityList();
+      });
+      targetInput.addEventListener("input", function (e) {
+        cg.target = e.target.value;
+        saveState();
+      });
 
       listEl.appendChild(card);
     });
