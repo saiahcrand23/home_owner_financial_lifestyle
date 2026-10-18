@@ -236,6 +236,11 @@
   .ded-row .field { flex: 1 1 110px; margin-bottom: 0; }
   .ded-row .ded-static { padding: 8px 0; font-size: 0.92rem; color: var(--text-dim); }
   .empty-msg { font-size: 0.85rem; color: var(--text-dim); text-align: center; padding: 14px 0; }
+  .report-banner {
+    background: var(--accent-dim); border: 1px solid var(--accent); border-radius: var(--radius);
+    padding: 12px 16px; margin-bottom: 16px; font-size: 0.85rem; line-height: 1.5; color: var(--text);
+  }
+  .report-banner .btn { margin-top: 8px; }
   .g-pri-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; background: var(--bg); }
   .g-pri-num {
     flex: 0 0 auto; width: 22px; height: 22px; border-radius: 999px;
@@ -358,6 +363,12 @@
 </nav>
 
 <main>
+
+  <div class="report-banner print-hide" id="report-banner" hidden>
+    <strong>Report view</strong> &mdash; opened from your Home Screen app with the numbers you had there.
+    To print, use this browser&rsquo;s <strong>Share</strong> button and choose <strong>Print</strong>.
+    <button class="btn" id="btn-banner-print" type="button">Try printing now</button>
+  </div>
 
   <!-- ===================== FINANCIAL GOALS ===================== -->
   <section class="tabpanel active" id="tab-goals">
@@ -1321,22 +1332,30 @@
     });
   }
 
+  // Replaces `state` with DEFAULTS merged over `source`, then brings it up to
+  // the current schema. Every entry point that adopts a foreign plan —
+  // localStorage, a JSON import, a print hand-off link — goes through here, so
+  // none of them can drift from the others as migrations accumulate.
+  function adoptState(source) {
+    state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), source || {});
+    migrateLegacyCategories(state, source);
+    migrateLegacyBonusFrequency(state, source);
+    migrateLegacyBrokerage(state);
+    migrateLegacyToCashFlow(state, source);
+    migrateLegacyContribDates(state);
+    migrateLegacyHousingSplit(state, source);
+    migrateLegacySavingsSplit(state);
+    migrateLegacyGoalsOrder(state);
+    if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
+  }
+
   function loadState() {
     let saved = null;
     try {
       const raw = localStorage.getItem("hlf-state");
       if (raw) saved = JSON.parse(raw);
     } catch (e) { /* ignore corrupt storage */ }
-    state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), saved || {});
-    migrateLegacyCategories(state, saved);
-    migrateLegacyBonusFrequency(state, saved);
-    migrateLegacyBrokerage(state);
-    migrateLegacyToCashFlow(state, saved);
-    migrateLegacyContribDates(state);
-    migrateLegacyHousingSplit(state, saved);
-    migrateLegacySavingsSplit(state);
-    migrateLegacyGoalsOrder(state);
-    if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
+    adoptState(saved);
   }
 
   function saveState() {
@@ -3914,22 +3933,108 @@
   }
 
   // ---------------------------------------------------------------------
+  // Print hand-off
+  //
+  // Added to the Home Screen, iOS runs this as a standalone web app: no
+  // Safari chrome, so no Share → Print, and window.print() does nothing. The
+  // way out is to reopen the page in the browser — and since that browser
+  // keeps its own storage, the plan has to travel in the link or the report
+  // would render against empty defaults.
+  // ---------------------------------------------------------------------
+  function isStandaloneWebApp() {
+    return window.navigator.standalone === true;
+  }
+
+  function encodeStateForUrl() {
+    const bytes = new TextEncoder().encode(JSON.stringify(state));
+    let bin = "";
+    // Chunked: apply() on a 10k+ argument list blows the call stack.
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+
+  function decodeStateFromUrl(token) {
+    const b64 = token.replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 ? "====".slice(b64.length % 4) : "";
+    const bin = atob(b64 + pad);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+
+  function openReportInBrowser() {
+    const url = location.origin + location.pathname + "#report=" + encodeStateForUrl();
+    // Past roughly this length Safari drops the request rather than erroring,
+    // which would look like a dead button.
+    if (url.length > 60000) {
+      alert("This plan is too large to carry in a link. Use “Export data” here, then “Import data” in your browser.");
+      return;
+    }
+    if (window.open(url, "_blank")) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function () {
+        alert("Couldn’t open your browser automatically — the report link is on your clipboard. Paste it into your browser, then use Share → Print.");
+      }, function () {
+        alert("Couldn’t open your browser automatically. Use “Export data” here, then “Import data” in your browser to print.");
+      });
+      return;
+    }
+    alert("Couldn’t open your browser automatically. Use “Export data” here, then “Import data” in your browser to print.");
+  }
+
+  // Returns true when the page was opened by a hand-off link.
+  function loadStateFromReportLink() {
+    const match = /[#&]report=([A-Za-z0-9\-_]+)/.exec(location.hash || "");
+    if (!match) return false;
+    try {
+      // Deliberately not saved: this browser may hold its own plan, and
+      // printing from the phone shouldn't overwrite it.
+      adoptState(decodeStateFromUrl(match[1]));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function enterReportMode() {
+    document.getElementById("report-banner").hidden = false;
+    preparePrintableDom();
+    try { window.print(); } catch (e) { /* iOS may not open a dialog; banner explains */ }
+  }
+
+  // The Savings Goals timeline is the one result that isn't live — it only
+  // fills in on "Calculate my timeline" — so without this it would print
+  // blank for anyone who hasn't pressed that button. Collapsed <details>
+  // (the amortization and projection tables) print as just their summary.
+  function preparePrintableDom() {
+    renderGoalsResult();
+    document.querySelectorAll("details").forEach(function (d) { d.open = true; });
+  }
+
+  // ---------------------------------------------------------------------
   // Export / Import / Reset
   // ---------------------------------------------------------------------
   function wireDataControls() {
     document.getElementById("btn-print").addEventListener("click", function () {
-      // The Savings Goals timeline is the one result that isn't live — it only
-      // fills in on "Calculate my timeline" — so without this the printed tab
-      // would be an empty page for anyone who hasn't pressed that button.
-      renderGoalsResult();
+      if (isStandaloneWebApp()) {
+        openReportInBrowser();
+        return;
+      }
       const detailsEls = document.querySelectorAll("details");
       const wasOpen = Array.prototype.map.call(detailsEls, function (d) { return d.open; });
-      detailsEls.forEach(function (d) { d.open = true; });
+      preparePrintableDom();
       window.print();
       window.onafterprint = function () {
         detailsEls.forEach(function (d, i) { d.open = wasOpen[i]; });
         window.onafterprint = null;
       };
+    });
+
+    document.getElementById("btn-banner-print").addEventListener("click", function () {
+      preparePrintableDom();
+      window.print();
     });
 
     document.getElementById("btn-export").addEventListener("click", function () {
@@ -3955,17 +4060,7 @@
       const reader = new FileReader();
       reader.onload = function () {
         try {
-          const imported = JSON.parse(reader.result);
-          state = deepMerge(JSON.parse(JSON.stringify(DEFAULTS)), imported);
-          migrateLegacyCategories(state, imported);
-          migrateLegacyBonusFrequency(state, imported);
-          migrateLegacyBrokerage(state);
-          migrateLegacyToCashFlow(state, imported);
-          migrateLegacyContribDates(state);
-          migrateLegacyHousingSplit(state, imported);
-          migrateLegacySavingsSplit(state);
-          migrateLegacyGoalsOrder(state);
-          if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
+          adoptState(JSON.parse(reader.result));
           saveState();
           syncStaticFields();
           renderAll();
@@ -3992,10 +4087,13 @@
   // ---------------------------------------------------------------------
   document.addEventListener("DOMContentLoaded", function () {
     loadState();
+    // Must land before wireInputs(), which seeds every field from state.
+    const fromReportLink = loadStateFromReportLink();
     wireTabs();
     wireDataControls();
     wireInputs();
     renderAll();
+    if (fromReportLink) enterReportMode();
   });
 })();
 </script>
