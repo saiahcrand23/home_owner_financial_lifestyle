@@ -304,8 +304,25 @@
     nav.tabs, .radio-toggle, .addrow, .btn { display: none !important; }
     main { max-width: none; padding: 0; }
     .card { break-inside: avoid; box-shadow: none; }
+    /* A card built around a long table is taller than a page on its own, so
+       keeping it whole would strand it — and its tab heading — on a page of
+       its own. Those flow across the break instead. */
+    .card:has(table) { break-inside: auto; }
     .tabpanel { display: block !important; }
     .tabpanel + .tabpanel { break-before: page; page-break-before: always; }
+    .print-heading { break-after: avoid; page-break-after: avoid; }
+    /* A printed plan is a report, not a worksheet: everything you typed in is
+       dropped and only what the calculators produced survives. Cards that are
+       pure input carry .print-hide; mixed cards tag just their input blocks. */
+    .print-hide { display: none !important; }
+    /* Per-child rows are the 529 allocation inputs; the projection stats
+       rendered beneath them are this card's output. */
+    #k-child-list .field-row, #k-child-list .checkbox-row { display: none !important; }
+    /* With the inputs gone, a child whose 529 is switched off has nothing left
+       to show — without this its account box prints as an empty frame. */
+    #k-child-list .subcard .subcard:has(.k-c-529-output:empty) { display: none !important; }
+    /* Side-by-side cards would otherwise split awkwardly across page breaks. */
+    .grid { grid-template-columns: 1fr; }
     .print-heading {
       display: block; font-size: 1.3rem; font-weight: 700;
       margin: 0 0 14px; padding-bottom: 8px; border-bottom: 2px solid #000;
@@ -347,14 +364,14 @@
     <h2 class="print-heading">Savings Goals</h2>
     <div class="grid">
 
-      <div class="card full-width">
+      <div class="card full-width print-hide">
         <h2>Contributions</h2>
         <p class="hint">Each rule applies across all enabled goals below, in sequence &mdash; leftover cash after each goal rolls forward automatically to the next. Give a contribution a name to label it (e.g. "RSU Vest", "Paycheck"). The list is kept sorted by date automatically.</p>
         <div id="g-contrib-list"></div>
         <button class="btn" id="g-add-contrib" type="button">+ Add contribution</button>
       </div>
 
-      <div class="card">
+      <div class="card print-hide">
         <h2>Loans</h2>
         <div class="checkbox-row">
           <input type="checkbox" id="g-loansEnabled">
@@ -366,7 +383,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card print-hide">
         <h2>Savings targets</h2>
         <h3>Emergency fund</h3>
         <div class="checkbox-row">
@@ -390,14 +407,14 @@
         </div>
       </div>
 
-      <div class="card full-width">
+      <div class="card full-width print-hide">
         <h2>Additional goals</h2>
         <p class="hint">Add as many extra goals as you want &mdash; a new car, additional emergency savings, whatever. Name them and give them a target here; set where each one fits relative to loans, the emergency fund, and the house down payment in Priority Order below.</p>
         <div id="g-custom-goal-list"></div>
         <button class="btn" id="g-add-custom-goal" type="button">+ Add goal</button>
       </div>
 
-      <div class="card">
+      <div class="card print-hide">
         <h2>High-yield savings account</h2>
         <div class="checkbox-row">
           <input type="checkbox" id="g-hysaEnabled">
@@ -410,7 +427,7 @@
         </div>
       </div>
 
-      <div class="card full-width">
+      <div class="card full-width print-hide">
         <h2>Priority order</h2>
         <p class="hint">Every enabled goal above &mdash; loans, the emergency fund, the house down payment, and your additional goals &mdash; funds in this order. Each goal only ever receives cash still left over once every goal above it is fully funded (or, for loans, fully paid off), so money committed to an earlier goal is never diverted to a later one. Use the &uarr; / &darr; buttons to move debt or the down payment goal anywhere in the list, including after one or more additional goals. A goal you disable above keeps its place here for whenever you turn it back on.</p>
         <div id="g-priority-list"></div>
@@ -431,7 +448,7 @@
     <h2 class="print-heading">Home Buying</h2>
     <div class="grid">
 
-      <div class="card">
+      <div class="card print-hide">
         <h2>Loan &amp; purchase inputs</h2>
         <div class="field">
           <label>Home price</label>
@@ -514,7 +531,7 @@
         <div class="stat"><span>Other upfront costs subtotal</span><span class="val" id="out-cc-upfront"></span></div>
         <div class="stat total"><span>Total cash to close</span><span class="val" id="out-cc-total"></span></div>
 
-        <details>
+        <details class="print-hide">
           <summary>Closing cost detail</summary>
           <div class="field-row">
             <div class="field"><label>Loan origination fee (%)</label><input type="number" id="c-originationPct" step="0.1"></div>
@@ -542,7 +559,7 @@
           </div>
         </details>
 
-        <details>
+        <details class="print-hide">
           <summary>Other upfront / move-in costs</summary>
           <div class="field-row">
             <div class="field"><label>Moving costs ($)</label><input type="number" id="u-moving" step="50"></div>
@@ -581,7 +598,7 @@
     <div class="grid">
 
       <div class="stack">
-        <div class="card">
+        <div class="card print-hide">
           <h2>Income</h2>
           <div class="field">
             <label>Gross regular pay (monthly $)</label>
@@ -608,7 +625,7 @@
           </div>
         </div>
 
-        <div class="card">
+        <div class="card print-hide">
           <h2>Payroll deductions</h2>
           <div class="field-row">
             <div class="field">
@@ -628,7 +645,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card print-hide">
         <h2>Budget</h2>
         <p class="hint">Enter each bill at its own cadence &mdash; a $1,400 semi-annual premium is 1400, not 233. The pinned row is mortgage and PMI only, since those are always monthly; property tax, insurance, HOA and maintenance belong here as their own bills.</p>
         <div id="cf-bill-list"></div>
@@ -637,7 +654,7 @@
 
       <div class="card full-width">
         <h2>12-month running balance</h2>
-        <div class="field">
+        <div class="field print-hide">
           <label>Cash on hand at the start of the cycle ($)</label>
           <input type="number" id="cf-openingBalance" step="500">
           <div class="sub">Money carried in from last year &mdash; e.g. a December bonus funding a January expense. Seeds the bonus and combined lines; the regular-only line always starts at $0 on purpose.</div>
@@ -719,14 +736,14 @@
               <button data-alloc="regular" data-mode="percent" id="alloc-regular-percent">Percentage</button>
               <button data-alloc="regular" data-mode="dollar" id="alloc-regular-dollar">Dollar amount / month</button>
             </div>
-            <div id="alloc-regular-percent-fields">
+            <div id="alloc-regular-percent-fields" class="print-hide">
               <div class="field"><label>Discretionary %</label><input type="number" id="ar-discretionaryPct" step="5" min="0" max="100"></div>
               <div class="field"><label>Home savings %</label><input type="number" id="ar-homeSavingsPct" step="5" min="0" max="100"></div>
               <div class="field"><label>Car savings %</label><input type="number" id="ar-carSavingsPct" step="5" min="0" max="100"></div>
               <div class="field"><label>Kids&rsquo; future %</label><input type="number" id="ar-kidsFuturePct" step="5" min="0" max="100"></div>
               <div class="field"><label>House payoff %</label><input type="number" id="ar-payoffPct" step="5" disabled><div class="sub">Auto-set to the remainder</div></div>
             </div>
-            <div id="alloc-regular-dollar-fields">
+            <div id="alloc-regular-dollar-fields" class="print-hide">
               <div class="field"><label>Discretionary $ / month</label><input type="number" id="ar-discretionaryDollar" step="25"></div>
               <div class="field"><label>Home savings $ / month</label><input type="number" id="ar-homeSavingsDollar" step="25"></div>
               <div class="field"><label>Car savings $ / month</label><input type="number" id="ar-carSavingsDollar" step="25"></div>
@@ -746,14 +763,14 @@
               <button data-alloc="bonus" data-mode="percent" id="alloc-bonus-percent">Percentage</button>
               <button data-alloc="bonus" data-mode="dollar" id="alloc-bonus-dollar">Dollar amount / year</button>
             </div>
-            <div id="alloc-bonus-percent-fields">
+            <div id="alloc-bonus-percent-fields" class="print-hide">
               <div class="field"><label>Discretionary %</label><input type="number" id="ab-discretionaryPct" step="5" min="0" max="100"></div>
               <div class="field"><label>Home savings %</label><input type="number" id="ab-homeSavingsPct" step="5" min="0" max="100"></div>
               <div class="field"><label>Car savings %</label><input type="number" id="ab-carSavingsPct" step="5" min="0" max="100"></div>
               <div class="field"><label>Kids&rsquo; future %</label><input type="number" id="ab-kidsFuturePct" step="5" min="0" max="100"></div>
               <div class="field"><label>House payoff %</label><input type="number" id="ab-payoffPct" step="5" disabled><div class="sub">Auto-set to the remainder</div></div>
             </div>
-            <div id="alloc-bonus-dollar-fields">
+            <div id="alloc-bonus-dollar-fields" class="print-hide">
               <div class="field"><label>Discretionary $ / year</label><input type="number" id="ab-discretionaryDollar" step="500"></div>
               <div class="field"><label>Home savings $ / year</label><input type="number" id="ab-homeSavingsDollar" step="500"></div>
               <div class="field"><label>Car savings $ / year</label><input type="number" id="ab-carSavingsDollar" step="500"></div>
@@ -795,7 +812,7 @@
         <div class="stat"><span>PMI ends (recalculated)</span><span class="val" id="out-po-pmiEnd"></span></div>
       </div>
 
-      <div class="card">
+      <div class="card print-hide">
         <h2>Optional extra amounts by year</h2>
         <p class="hint">Added on top of the recurring surplus-to-payoff amount for that year.</p>
         <table>
@@ -834,7 +851,7 @@
     <h2 class="print-heading">Retirement</h2>
     <div class="grid">
 
-      <div class="card">
+      <div class="card print-hide">
         <h2>Inputs</h2>
         <div class="field-row">
           <div class="field">
@@ -885,7 +902,7 @@
         <div class="stat"><span>Total earned (growth)</span><span class="val"><span id="out-r-earned"></span><span class="val-sub" id="out-r-earned-real"></span></span></div>
       </div>
 
-      <div class="card">
+      <div class="card print-hide">
         <h2>Contribution changes by age</h2>
         <p class="hint">Default: no changes &mdash; your calculated contribution (above) stays flat every year. Add a row to set a new monthly contribution starting at a given age; it replaces the calculated contribution + employer match from that age forward, until the next row.</p>
         <table>
@@ -935,14 +952,14 @@
           <span>New total starting <span id="out-k-annualPoolLatestYear"></span></span>
           <span class="val" id="out-k-annualPoolLatest"></span>
         </div>
-        <div class="field" style="margin-top:14px">
+        <div class="field print-hide" style="margin-top:14px">
           <label>Plan start date</label>
           <input type="date" id="k-startDate">
           <div class="sub">Contributions are modeled starting this month. Defaults to today.</div>
         </div>
       </div>
 
-      <div class="card">
+      <div class="card print-hide">
         <h2>Increase contributions by year</h2>
         <p class="hint">Optional: set a new total annual amount starting in a given year, replacing the figure above from that year forward until the next row.</p>
         <table>
@@ -964,8 +981,8 @@
 
       <div class="card full-width">
         <h2>Children</h2>
-        <p class="hint">Add each child, then set up a 529 plan for their savings. Allocations are a % of the total annual contribution above.</p>
-        <div class="checkbox-row">
+        <p class="hint print-hide">Add each child, then set up a 529 plan for their savings. Allocations are a % of the total annual contribution above.</p>
+        <div class="checkbox-row print-hide">
           <input type="checkbox" id="k-easy529">
           <label for="k-easy529">Balance all 529 plans to an equal projected ending balance</label>
         </div>
@@ -3901,6 +3918,10 @@
   // ---------------------------------------------------------------------
   function wireDataControls() {
     document.getElementById("btn-print").addEventListener("click", function () {
+      // The Savings Goals timeline is the one result that isn't live — it only
+      // fills in on "Calculate my timeline" — so without this the printed tab
+      // would be an empty page for anyone who hasn't pressed that button.
+      renderGoalsResult();
       const detailsEls = document.querySelectorAll("details");
       const wasOpen = Array.prototype.map.call(detailsEls, function (d) { return d.open; });
       detailsEls.forEach(function (d) { d.open = true; });
