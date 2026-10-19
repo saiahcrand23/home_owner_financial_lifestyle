@@ -4001,7 +4001,20 @@
   function enterReportMode() {
     document.getElementById("report-banner").hidden = false;
     preparePrintableDom();
-    try { window.print(); } catch (e) { /* iOS may not open a dialog; banner explains */ }
+  }
+
+  // Safari asks "The webpage did not finish loading. Do you want to continue
+  // printing?" when print() runs before the load event — which is what firing
+  // it on arrival did — so wait for load rather than for the DOM alone.
+  function printWhenReady() {
+    if (document.readyState === "complete") {
+      window.print();
+      return;
+    }
+    window.addEventListener("load", function onLoad() {
+      window.removeEventListener("load", onLoad);
+      window.print();
+    });
   }
 
   // The Savings Goals timeline is the one result that isn't live — it only
@@ -4034,7 +4047,7 @@
 
     document.getElementById("btn-banner-print").addEventListener("click", function () {
       preparePrintableDom();
-      window.print();
+      printWhenReady();
     });
 
     document.getElementById("btn-export").addEventListener("click", function () {
