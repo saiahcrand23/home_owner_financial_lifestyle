@@ -3964,24 +3964,38 @@
     return JSON.parse(new TextDecoder().decode(bytes));
   }
 
-  function openReportInBrowser() {
+  // Both ways out of a Home Screen web app are dead ends: window.print() does
+  // nothing, and window.open() of a same-origin link is treated as in-scope,
+  // so it navigates inside the app instead of launching a browser. iOS's own
+  // share sheet is the remaining exit — and it lets the plan go to whichever
+  // browser is picked, where Share → Print exists.
+  function shareReportLink() {
     const url = location.origin + location.pathname + "#report=" + encodeStateForUrl();
-    // Past roughly this length Safari drops the request rather than erroring,
-    // which would look like a dead button.
     if (url.length > 60000) {
       alert("This plan is too large to carry in a link. Use “Export data” here, then “Import data” in your browser.");
       return;
     }
-    if (window.open(url, "_blank")) return;
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(url).then(function () {
-        alert("Couldn’t open your browser automatically — the report link is on your clipboard. Paste it into your browser, then use Share → Print.");
-      }, function () {
-        alert("Couldn’t open your browser automatically. Use “Export data” here, then “Import data” in your browser to print.");
+    if (navigator.share) {
+      navigator.share({ title: "Financial Goal Projections", url: url }).catch(function (err) {
+        // Dismissing the sheet rejects as well, and that isn't a failure.
+        if (err && err.name === "AbortError") return;
+        copyReportLink(url);
       });
       return;
     }
-    alert("Couldn’t open your browser automatically. Use “Export data” here, then “Import data” in your browser to print.");
+    copyReportLink(url);
+  }
+
+  function copyReportLink(url) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(function () {
+        alert("Report link copied. Paste it into your browser, then use Share → Print.");
+      }, function () {
+        alert("Couldn’t share the report link. Use “Export data” here, then “Import data” in your browser to print.");
+      });
+      return;
+    }
+    alert("Couldn’t share the report link. Use “Export data” here, then “Import data” in your browser to print.");
   }
 
   // Returns true when the page was opened by a hand-off link.
@@ -4032,7 +4046,7 @@
   function wireDataControls() {
     document.getElementById("btn-print").addEventListener("click", function () {
       if (isStandaloneWebApp()) {
-        openReportInBrowser();
+        shareReportLink();
         return;
       }
       const detailsEls = document.querySelectorAll("details");
