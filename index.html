@@ -261,8 +261,8 @@
   }
   .g-pri-name { flex: 1; font-size: 0.88rem; color: var(--text); }
 
-  #g-loans-wrap, #g-emerg-wrap, #g-house-wrap, #g-hysa-wrap { display: none; }
-  #g-loans-wrap.on, #g-emerg-wrap.on, #g-house-wrap.on, #g-hysa-wrap.on { display: block; }
+  #g-loans-wrap, #g-emerg-wrap, #g-house-wrap { display: none; }
+  #g-loans-wrap.on, #g-emerg-wrap.on, #g-house-wrap.on { display: block; }
 
   .kids-acct-fields { display: none; }
   .kids-acct-fields.on { display: block; }
@@ -438,19 +438,6 @@
         <p class="hint">Add as many extra goals as you want &mdash; a new car, additional emergency savings, whatever. Name them and give them a target here; set where each one fits relative to loans, the emergency fund, and the house down payment in Priority Order below.</p>
         <div id="g-custom-goal-list"></div>
         <button class="btn" id="g-add-custom-goal" type="button">+ Add goal</button>
-      </div>
-
-      <div class="card print-hide">
-        <h2>High-yield savings account</h2>
-        <div class="checkbox-row">
-          <input type="checkbox" id="g-hysaEnabled">
-          <label for="g-hysaEnabled">I have a HYSA</label>
-        </div>
-        <div id="g-hysa-wrap" class="field">
-          <label>HYSA APY (%)</label>
-          <input type="number" id="g-apy" step="0.01" min="0">
-          <div class="sub">Interest compounds daily on savings-phase balances, credited on the last day of each month.</div>
-        </div>
       </div>
 
       <div class="card full-width print-hide">
@@ -1077,11 +1064,9 @@
       loansEnabled: true,
       emergEnabled: true,
       houseEnabled: true,
-      hysaEnabled: true,
       emergGoal: 15000,
       houseGoal: null,
       houseGoalOverrideActive: false,
-      apy: 4.00,
       loanId: 1,
       contribId: 7,
       customGoalId: 0,
@@ -1416,6 +1401,10 @@
     migrateLegacyHousingSplit(state, source);
     migrateLegacySavingsSplit(state);
     migrateLegacyGoalsOrder(state);
+    // HYSA interest was dropped. deepMerge keeps keys it finds in the source,
+    // so without this they'd ride along in every future save and export.
+    delete state.goals.hysaEnabled;
+    delete state.goals.apy;
     if (!state.kids.startDate) state.kids.startDate = new Date().toISOString().slice(0, 10);
   }
 
@@ -1479,10 +1468,6 @@
   // Savings Goals calculation engine
   // ---------------------------------------------------------------------
   function goalsDaysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
-  function goalsHysaInt(bal, apy, y, m) {
-    if (!apy || bal <= 0) return 0;
-    return bal * (Math.pow(1 + apy / 100 / 365, goalsDaysInMonth(y, m)) - 1);
-  }
   // Accepts both "YYYY-MM-DD" and the legacy "YYYY-MM" (day defaults to the
   // 1st), so contributions saved before recurring rules carried a day still
   // parse if they somehow reach here unmigrated.
@@ -1575,7 +1560,7 @@
 
   // `source` picks where the month-by-month money comes from: "contribs" (the
   // Savings Goals tab's flat contribution rules) or "phases" (the dated
-  // budgets). Everything downstream — priority order, HYSA interest, the
+  // budgets). Everything downstream — priority order, goal funding, the
   // timeline rows — is identical, so the two tabs can't drift apart.
   function computeGoalsTimeline(source) {
     const g = state.goals;
@@ -1605,7 +1590,6 @@
       ? Number(g.houseGoal)
       : computeHousing().totalCashToClose;
     const houseGoal = g.houseEnabled ? (parseFloat(effectiveHouseGoal) || 0) : 0;
-    const apy = g.hysaEnabled ? (parseFloat(g.apy) || 0) : 0;
 
     // Every enabled goal — built-in and custom — runs as one phase in a
     // single priority queue, in whatever order the Priority Order list above
@@ -1623,7 +1607,7 @@
       return { type: "custom", name: name, goal: target };
     });
     phases.forEach(function (p) {
-      p.monthCount = 0; p.interest = 0; p.finalBal = 0; p.finalDate = null;
+      p.monthCount = 0; p.finalBal = 0; p.finalDate = null;
       p.goalDate = null; p.goalMonthCount = 0; p.goalBal = 0; p.excess = 0;
       p.totalInterest = 0; p.totalPayments = 0;
     });
@@ -1703,17 +1687,21 @@
         }
       } else {
         pool += cashLeft;
-        const int = goalsHysaInt(pool, apy, cur.getFullYear(), cur.getMonth());
-        pool += int; phase.interest += int;
-        phase.finalBal = pool;
-        phase.finalDate = goalsFmtDate(cur);
-        phase.monthCount++;
-        if (phase.goal > 0 && pool >= phase.goal && !phase.goalDate) {
-          phase.goalDate = goalsFmtDate(cur);
-          phase.goalMonthCount = phase.monthCount;
-          phase.goalBal = pool;
-          phase.excess = pool - phase.goal;
-          pool = phase.excess;
+        // The pool keeps paying out within the same month for as long as it
+        // can finish goals. Stopping after one would hold a funded goal back
+        // until the next month even though the money was already in hand.
+        while (phaseIdx < phases.length) {
+          const stage = phases[phaseIdx];
+          if (stage.type === "loans") break;
+          stage.finalBal = pool;
+          stage.finalDate = goalsFmtDate(cur);
+          stage.monthCount++;
+          if (!(stage.goal > 0 && pool >= stage.goal && !stage.goalDate)) break;
+          stage.goalDate = goalsFmtDate(cur);
+          stage.goalMonthCount = stage.monthCount;
+          stage.goalBal = pool;
+          stage.excess = pool - stage.goal;
+          pool = stage.excess;
           phaseIdx++;
         }
       }
@@ -1782,7 +1770,6 @@
     return {
       error: null, warning: minCoverageWarning,
       timelineRows: timelineRows, timelineTotal: timelineTotal,
-      apy: apy,
       phases: phases
     };
   }
@@ -2485,7 +2472,6 @@
     bindCheckbox("g-loansEnabled", function () { return state.goals.loansEnabled; }, function (v) { state.goals.loansEnabled = v; });
     bindCheckbox("g-emergEnabled", function () { return state.goals.emergEnabled; }, function (v) { state.goals.emergEnabled = v; });
     bindCheckbox("g-houseEnabled", function () { return state.goals.houseEnabled; }, function (v) { state.goals.houseEnabled = v; });
-    bindCheckbox("g-hysaEnabled", function () { return state.goals.hysaEnabled; }, function (v) { state.goals.hysaEnabled = v; });
     bindNumber("g-emergGoal", function () { return state.goals.emergGoal; }, function (v) { state.goals.emergGoal = v; });
     document.getElementById("g-houseGoal").addEventListener("input", function (e) {
       state.goals.houseGoalOverrideActive = true;
@@ -2499,7 +2485,6 @@
       saveState();
       renderAll();
     });
-    bindNumber("g-apy", function () { return state.goals.apy; }, function (v) { state.goals.apy = v; });
 
     document.getElementById("g-add-loan").addEventListener("click", function () {
       state.goals.loanId += 1;
@@ -2704,7 +2689,6 @@
     document.getElementById("g-loans-wrap").classList.toggle("on", g.loansEnabled);
     document.getElementById("g-emerg-wrap").classList.toggle("on", g.emergEnabled);
     document.getElementById("g-house-wrap").classList.toggle("on", g.houseEnabled);
-    document.getElementById("g-hysa-wrap").classList.toggle("on", g.hysaEnabled);
 
     const cashToClose = computeHousing().totalCashToClose;
     document.getElementById("g-houseGoalCalculated").textContent = fmt$(cashToClose);
@@ -3105,7 +3089,6 @@
       return " after " + prevPhase.name;
     }
 
-    let cumulativeHysaInterest = 0;
     result.phases.forEach(function (phase, i) {
       const prevPhase = i > 0 ? result.phases[i - 1] : null;
 
@@ -3124,16 +3107,13 @@
       }
 
       if (phase.type === "emerg") {
-        cumulativeHysaInterest += phase.interest;
         resultArea.appendChild(buildGoalsPhaseBlock({
           cls: "g-phase-emerg",
           title: "✓ Goal " + phase.gn + " — " + fmt$(phase.goal) + " emergency fund reached",
           date: phase.goalDate,
           sub: phase.goalMonthCount + " month" + (phase.goalMonthCount === 1 ? "" : "s") + " of saving" + afterPhaseText(prevPhase),
           stats: [
-            { val: fmt$(phase.goalBal), lbl: "Balance when goal hit" },
-            { val: fmt$(phase.interest), lbl: "HYSA interest earned" },
-            { val: (result.apy ? result.apy.toFixed(2) + "%" : "—") + " APY", lbl: "Daily compounding" }
+            { val: fmt$(phase.goalBal), lbl: "Balance when goal hit" }
           ]
         }));
         return;
@@ -3144,16 +3124,13 @@
       const excessFromPrev = prevPhase && prevPhase.excess > 0
         ? { val: fmt$(prevPhase.excess), lbl: "Excess from " + (prevPhase.type === "emerg" ? "E-Fund" : prevPhase.name) }
         : null;
-      cumulativeHysaInterest += phase.interest;
 
       if (phase.goal > 0) {
         const hitIt = !!phase.goalDate;
         const stats = [
-          { val: fmt$(hitIt ? phase.goalBal : phase.finalBal), lbl: "Balance when goal hit" },
-          { val: fmt$(phase.interest), lbl: "HYSA interest earned" }
+          { val: fmt$(hitIt ? phase.goalBal : phase.finalBal), lbl: "Balance when goal hit" }
         ];
         if (excessFromPrev) stats.push(excessFromPrev);
-        stats.push({ val: fmt$(cumulativeHysaInterest), lbl: "Total HYSA interest" });
         const targetLabel = phase.type === "house"
           ? (fmt$(phase.goal) + " down payment")
           : (fmt$(phase.goal) + " for " + phase.name);
@@ -3171,13 +3148,12 @@
         const asOfDate = phase.finalDate || (prevPhase && (prevPhase.goalDate || prevPhase.finalDate));
         const stats = [];
         if (excessFromPrev) stats.push(excessFromPrev);
-        stats.push({ val: fmt$(phase.interest), lbl: "HYSA interest earned" });
-        stats.push({ val: fmt$(cumulativeHysaInterest), lbl: "Total HYSA interest" });
+        stats.push({ val: phase.monthCount + "", lbl: "Months of saving" });
         resultArea.appendChild(buildGoalsPhaseBlock({
           cls: phase.phaseCls,
           title: icon + " Goal " + phase.gn + " — " + (phase.type === "house" ? "House Down Payment" : phase.name),
           date: fmt$(bal),
-          sub: "HYSA balance as of " + asOfDate + " · " + phase.monthCount + " month" + (phase.monthCount === 1 ? "" : "s") + " of saving",
+          sub: "Saved as of " + asOfDate,
           stats: stats
         }));
       }
