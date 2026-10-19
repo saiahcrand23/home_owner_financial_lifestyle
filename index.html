@@ -241,6 +241,18 @@
     padding: 12px 16px; margin-bottom: 16px; font-size: 0.85rem; line-height: 1.5; color: var(--text);
   }
   .report-banner .btn { margin-top: 8px; }
+  .ph-phase { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; background: var(--bg); overflow: hidden; }
+  .ph-phase.open { border-color: var(--accent); }
+  .ph-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; cursor: pointer; flex-wrap: wrap; }
+  .ph-head:hover { background: var(--accent-dim); }
+  .ph-caret { color: var(--text-dim); font-size: 0.8rem; }
+  .ph-head .ph-name { font-weight: 600; font-size: 0.9rem; }
+  .ph-head .ph-range { color: var(--text-dim); font-size: 0.8rem; flex: 1; }
+  .ph-head .ph-surplus { font-weight: 600; font-size: 0.88rem; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .ph-head .ph-surplus.bad { color: var(--bad); }
+  .ph-body { padding: 4px 14px 14px; border-top: 1px solid var(--border); }
+  .ph-body h3 { margin-top: 14px; }
+  .ph-totals { margin-top: 12px; }
   .g-pri-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; background: var(--bg); }
   .g-pri-num {
     flex: 0 0 auto; width: 22px; height: 22px; border-radius: 999px;
@@ -309,10 +321,12 @@
     nav.tabs, .radio-toggle, .addrow, .btn { display: none !important; }
     main { max-width: none; padding: 0; }
     .card { break-inside: avoid; box-shadow: none; }
-    /* A card built around a long table is taller than a page on its own, so
-       keeping it whole would strand it — and its tab heading — on a page of
-       its own. Those flow across the break instead. */
-    .card:has(table) { break-inside: auto; }
+    /* A card built around a long table or a goal timeline is taller than a
+       page on its own, so keeping it whole would strand it — and its tab
+       heading — on a page of its own. Those flow across the break instead,
+       while the blocks inside them stay intact. */
+    .card:has(table), .card:has(.g-tl-list) { break-inside: auto; }
+    .g-phase, .g-tl-row, .subcard { break-inside: avoid; }
     .tabpanel { display: block !important; }
     .tabpanel + .tabpanel { break-before: page; page-break-before: always; }
     .print-heading { break-after: avoid; page-break-after: avoid; }
@@ -354,6 +368,7 @@
 
 <nav class="tabs">
   <button data-tab="goals" class="active">Savings Goals</button>
+  <button data-tab="phases">Phases</button>
   <button data-tab="housing">Home Buying</button>
   <button data-tab="cashflow">Cash Flow</button>
   <button data-tab="surplus">Surplus</button>
@@ -449,6 +464,40 @@
         <p class="hint">Simulates month by month in the priority order set above, using the contribution rules at the top of this page.</p>
         <button class="btn primary" id="g-calculate" type="button">Calculate my timeline</button>
         <div id="g-result-area"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== PHASES ===================== -->
+  <section class="tabpanel" id="tab-phases">
+    <h2 class="print-heading">Phases</h2>
+    <div class="grid">
+
+      <div class="card full-width print-hide">
+        <h2>Phases</h2>
+        <p class="hint">Where Cash Flow asks whether one budget works on average, this asks when you&rsquo;ll actually have the cash. Each phase is a budget that starts on a date and runs until the next phase begins &mdash; a rental, a move, owning the house &mdash; with its own pay, deductions and bills. Phases are listed in date order; the one covering a given month is the one funding your goals that month.</p>
+        <div id="ph-list"></div>
+        <button class="btn" id="ph-add" type="button">+ Add phase</button>
+      </div>
+
+      <div class="card full-width print-hide">
+        <h2>One-time amounts</h2>
+        <p class="hint">Money that arrives on a date rather than every month &mdash; a starting balance, RSU vests, a tax refund. A negative amount works too, for a one-off cost.</p>
+        <div id="ph-event-list"></div>
+        <button class="btn" id="ph-add-event" type="button">+ Add one-time amount</button>
+      </div>
+
+      <div class="card full-width">
+        <h2>Timeline</h2>
+        <p class="hint">Funds the goals and priority order from the Savings Goals tab, month by month, out of the phases above. Edit a goal there and it updates here.</p>
+        <div class="field print-hide" style="max-width:220px">
+          <label>Project through (years)</label>
+          <input type="number" id="ph-horizonYears" step="1" min="1" max="50">
+          <div class="sub">How far ahead to simulate before giving up on a goal.</div>
+        </div>
+        <button class="btn primary" id="ph-calculate" type="button">Calculate my timeline</button>
+        <div id="ph-result-area"></div>
       </div>
 
     </div>
@@ -1118,6 +1167,17 @@
         }
       }
     },
+    // Dated, real-life counterpart to the Cash Flow tab's single steady state:
+    // a run of budgets, each starting on a date and running until the next one
+    // begins. Goals and priority order are shared with the Savings Goals tab —
+    // same goals, projected from actual months instead of flat contributions.
+    phases: {
+      phaseId: 0,
+      eventId: 0,
+      horizonYears: 30,
+      list: [],
+      events: []
+    },
     payoff: {
       extraByYear: { "2": 2000, "3": 2500, "4": 2200 }
     },
@@ -1503,13 +1563,20 @@
     return (state.goals.order || []).filter(goalTokenEnabled);
   }
 
-  function computeGoalsTimeline() {
+  // `source` picks where the month-by-month money comes from: "contribs" (the
+  // Savings Goals tab's flat contribution rules) or "phases" (the dated
+  // budgets). Everything downstream — priority order, HYSA interest, the
+  // timeline rows — is identical, so the two tabs can't drift apart.
+  function computeGoalsTimeline(source) {
     const g = state.goals;
+    const usePhases = source === "phases";
 
     if (!g.loansEnabled && !g.emergEnabled && !g.houseEnabled && !g.customGoals.length) {
-      return { error: "Enable at least one goal to calculate your timeline." };
+      return { error: "Enable at least one goal on the Savings Goals tab to calculate your timeline." };
     }
-    if (!g.contribs.length) {
+    if (usePhases) {
+      if (!phaseList().length) return { error: "Add at least one phase to calculate your timeline." };
+    } else if (!g.contribs.length) {
       return { error: "Add at least one contribution rule." };
     }
 
@@ -1552,14 +1619,24 @@
     });
 
     let simStart = null;
-    g.contribs.forEach(function (c) {
-      const d = c.freq === "oneoff" ? (c.day ? goalsParseDate(c.day) : null) : goalsParseDate(c.start);
-      if (d && (!simStart || d < simStart)) simStart = new Date(d.getFullYear(), d.getMonth(), 1);
-    });
-    if (!simStart) return { error: "Set a start date on at least one contribution." };
+    if (usePhases) {
+      simStart = phasesSimStart();
+      if (!simStart) return { error: "Give at least one phase a start date." };
+    } else {
+      g.contribs.forEach(function (c) {
+        const d = c.freq === "oneoff" ? (c.day ? goalsParseDate(c.day) : null) : goalsParseDate(c.start);
+        if (d && (!simStart || d < simStart)) simStart = new Date(d.getFullYear(), d.getMonth(), 1);
+      });
+      if (!simStart) return { error: "Set a start date on at least one contribution." };
+    }
 
-    const simEnd = goalsAddMonths(simStart, 600);
-    const cashMap = goalsBuildCashMap(g.contribs, simStart, simEnd);
+    const horizonMonths = usePhases
+      ? Math.min(600, Math.max(12, (Number(state.phases.horizonYears) || 30) * 12))
+      : 600;
+    const simEnd = goalsAddMonths(simStart, horizonMonths);
+    const cashMap = usePhases
+      ? buildPhasesCashMap(simStart, simEnd)
+      : goalsBuildCashMap(g.contribs, simStart, simEnd);
 
     let remainingBalances = loanData.map(function (l) { return { rem: l.balance, rate: l.rate, minPay: l.minPay }; });
     // Uncommitted savings, shared across every phase — whatever one phase
@@ -1639,8 +1716,17 @@
 
     const loansPhase = phases.find(function (p) { return p.type === "loans"; });
     const emergPhase = phases.find(function (p) { return p.type === "emerg"; });
-    if (loansPhase && !loansPhase.goalDate) return { error: "Contributions aren't enough to pay off the loans within 50 years. Increase contribution amounts or required payments." };
-    if (emergPhase && emergPhase.goal > 0 && !emergPhase.goalDate) return { error: "Emergency fund goal not reached within the contribution window. Add more contributions or extend their end dates." };
+    const horizonYears = Math.round(horizonMonths / 12);
+    if (loansPhase && !loansPhase.goalDate) {
+      return { error: usePhases
+        ? "Your phases don't pay off the loans within " + horizonYears + " years. Free up money in a phase, or raise “Project through”."
+        : "Contributions aren't enough to pay off the loans within 50 years. Increase contribution amounts or required payments." };
+    }
+    if (emergPhase && emergPhase.goal > 0 && !emergPhase.goalDate) {
+      return { error: usePhases
+        ? "The emergency fund isn't reached within " + horizonYears + " years. Free up money in a phase, raise “Project through”, or move it down the priority order."
+        : "Emergency fund goal not reached within the contribution window. Add more contributions or extend their end dates." };
+    }
 
     let gn = 1;
     phases.forEach(function (p) { p.gn = gn++; });
@@ -1833,8 +1919,8 @@
   // Gross -> pre-tax deductions -> tax -> post-tax deductions -> net.
   // Retirement used to be subtracted after tax had already been computed on the
   // full gross, so pre-tax contributions got no tax benefit at all.
-  function netForSource(gross, taxRatePct, source) {
-    const d = state.cashflow.deductions;
+  function netForSource(gross, taxRatePct, source, deductions) {
+    const d = deductions;
     let pre = 0, post = 0;
     DEDUCTION_ORDER.forEach(function (key) {
       const row = d[key];
@@ -1851,8 +1937,8 @@
     const c = state.cashflow;
     const bonusPerYear = BONUS_FREQ_PER_YEAR[c.bonusFrequency] || 4;
 
-    const regular = netForSource(c.grossRegularMonthly, c.taxRateRegular, "regular");
-    const bonus = netForSource(c.grossBonusAmount, c.taxRateBonus, "bonus");
+    const regular = netForSource(c.grossRegularMonthly, c.taxRateRegular, "regular", c.deductions);
+    const bonus = netForSource(c.grossBonusAmount, c.taxRateBonus, "bonus", c.deductions);
 
     const bills = allBills();
     let regularBillsAnnual = 0, bonusBillsAnnual = 0;
@@ -1945,6 +2031,93 @@
       negativeMonths: months.filter(function (x) { return x.regularBalance < 0; }).map(function (x) { return x.label; }),
       bonusNegativeMonths: months.filter(function (x) { return x.bonusBalance < 0; }).map(function (x) { return x.label; })
     };
+  }
+
+  // ---------------------------------------------------------------------
+  // Phases
+  //
+  // Cash Flow models one budget held forever and answers "is this
+  // sustainable on average". A phase is the dated version: a budget that
+  // starts on a date and runs until the next phase begins, so a move or a
+  // house purchase changes the money available from that month on. Each
+  // phase stands alone — its own pay, deductions and bills — because the
+  // whole point is that they differ.
+  // ---------------------------------------------------------------------
+  function phaseList() {
+    return (state.phases.list || []).slice().sort(function (a, b) {
+      const x = a.start || "", y = b.start || "";
+      return x < y ? -1 : x > y ? 1 : a.id - b.id;
+    });
+  }
+
+  function phaseStartKey(p) {
+    const d = goalsParseDate(p.start);
+    return d ? goalsMonthKey(new Date(d.getFullYear(), d.getMonth(), 1)) : null;
+  }
+
+  function computePhase(p) {
+    const bonusPerYear = BONUS_FREQ_PER_YEAR[p.bonusFrequency] || 4;
+    const regular = netForSource(p.grossRegularMonthly, p.taxRateRegular, "regular", p.deductions);
+    const bonus = netForSource(p.grossBonusAmount, p.taxRateBonus, "bonus", p.deductions);
+    const billsAnnual = (p.bills || []).reduce(function (s, b) { return s + billAnnual(b); }, 0);
+    const netAnnual = regular.net * 12 + bonus.net * bonusPerYear;
+    return {
+      regular: regular, bonus: bonus, bonusPerYear: bonusPerYear,
+      billsAnnual: billsAnnual, netAnnual: netAnnual,
+      netMonthly: netAnnual / 12,
+      billsMonthly: billsAnnual / 12,
+      surplusMonthly: (netAnnual - billsAnnual) / 12
+    };
+  }
+
+  function phasesSimStart() {
+    let earliest = null;
+    function consider(str) {
+      const d = goalsParseDate(str);
+      if (d && (!earliest || d < earliest)) earliest = d;
+    }
+    phaseList().forEach(function (p) { consider(p.start); });
+    (state.phases.events || []).forEach(function (e) { consider(e.date); });
+    return earliest ? new Date(earliest.getFullYear(), earliest.getMonth(), 1) : null;
+  }
+
+  // Real months, not averages: pay lands monthly, a bonus only in the months
+  // it actually arrives, and a bill leaves the account in the month it is
+  // due. A month can legitimately come out negative — that is a month the
+  // bills outrun the pay, and savings genuinely take the hit.
+  function buildPhasesCashMap(simStart, simEnd) {
+    const map = new Map();
+    const ordered = phaseList().filter(function (p) { return phaseStartKey(p) !== null; });
+    const computed = ordered.map(computePhase);
+    const startKeys = ordered.map(phaseStartKey);
+    const firstKey = goalsMonthKey(simStart);
+    const lastKey = goalsMonthKey(simEnd);
+
+    for (let k = firstKey; k <= lastKey; k++) {
+      let idx = -1;
+      for (let i = 0; i < startKeys.length; i++) {
+        if (startKeys[i] <= k) idx = i; else break;
+      }
+      // Months before the first phase starts carry no budget, only events.
+      if (idx === -1) continue;
+      const p = ordered[idx], c = computed[idx];
+      const month = (k % 12) + 1;
+      let amt = c.regular.net;
+      if ((p.bonusMonths || []).indexOf(month) !== -1) amt += c.bonus.net;
+      (p.bills || []).forEach(function (b) {
+        if (billDueMonths(b).indexOf(month) !== -1) amt -= (Number(b.amount) || 0);
+      });
+      map.set(k, (map.get(k) || 0) + amt);
+    }
+
+    (state.phases.events || []).forEach(function (e) {
+      const d = goalsParseDate(e.date);
+      if (!d) return;
+      const k = goalsMonthKey(new Date(d.getFullYear(), d.getMonth(), 1));
+      if (k < firstKey || k > lastKey) return;
+      map.set(k, (map.get(k) || 0) + (Number(e.amount) || 0));
+    });
+    return map;
   }
 
   // Splits one pool across the five destinations. House payoff is always the
@@ -2339,6 +2512,23 @@
     });
     document.getElementById("g-calculate").addEventListener("click", function () {
       renderGoalsResult();
+    });
+
+    document.getElementById("ph-add").addEventListener("click", addPhase);
+    document.getElementById("ph-add-event").addEventListener("click", function () {
+      state.phases.eventId += 1;
+      state.phases.events.push({
+        id: state.phases.eventId, name: "", amount: 0,
+        date: new Date().toISOString().slice(0, 10)
+      });
+      saveState();
+      renderPhaseEventList();
+    });
+    bindNumber("ph-horizonYears",
+      function () { return state.phases.horizonYears; },
+      function (v) { state.phases.horizonYears = v; });
+    document.getElementById("ph-calculate").addEventListener("click", function () {
+      renderGoalsResult({ source: "phases", containerId: "ph-result-area" });
     });
 
     bindNumber("h-homePrice", function () { return state.housing.homePrice; }, function (v) { state.housing.homePrice = v; });
@@ -2825,9 +3015,10 @@
   // Only runs when "Calculate my timeline" is clicked — not on every
   // keystroke — since it's a month-by-month simulation, not a closed-form
   // formula, and results shouldn't flash/reset while someone is still typing.
-  function renderGoalsResult() {
-    const resultArea = document.getElementById("g-result-area");
-    const result = computeGoalsTimeline();
+  function renderGoalsResult(opts) {
+    opts = opts || {};
+    const resultArea = document.getElementById(opts.containerId || "g-result-area");
+    const result = computeGoalsTimeline(opts.source);
     resultArea.innerHTML = "";
 
     if (result.error) {
@@ -2972,6 +3163,375 @@
     });
   }
 
+  // ---------------------------------------------------------------------
+  // Phases tab
+  // ---------------------------------------------------------------------
+  // Each phase carries a full budget, so the lists get long — only one is
+  // expanded at a time, and this is view state, not part of the saved plan.
+  let openPhaseId = null;
+
+  function fmtPhaseMonth(str) {
+    const d = goalsParseDate(str);
+    return d ? goalsFmtDate(d) : "no start date";
+  }
+
+  function makePhaseFromCashFlow() {
+    const c = state.cashflow;
+    return {
+      grossRegularMonthly: c.grossRegularMonthly,
+      grossBonusAmount: c.grossBonusAmount,
+      bonusFrequency: c.bonusFrequency,
+      bonusMonths: (c.bonusMonths || []).slice(),
+      taxRateRegular: c.taxRateRegular,
+      taxRateBonus: c.taxRateBonus,
+      deductions: JSON.parse(JSON.stringify(c.deductions)),
+      bills: allBills().map(function (b, i) {
+        return {
+          id: i + 1, name: b.name, amount: b.amount,
+          cadence: b.cadence, dueMonths: (b.dueMonths || []).slice()
+        };
+      })
+    };
+  }
+
+  function addPhase() {
+    const existing = phaseList();
+    // A new phase is nearly always the previous one with a few things
+    // changed, so copy it rather than making them retype a whole budget.
+    const base = existing.length
+      ? JSON.parse(JSON.stringify(existing[existing.length - 1]))
+      : makePhaseFromCashFlow();
+    state.phases.phaseId += 1;
+    base.id = state.phases.phaseId;
+    base.name = existing.length ? "New phase" : "Current budget";
+    if (existing.length) {
+      const prev = goalsParseDate(existing[existing.length - 1].start) || new Date();
+      base.start = goalsAddMonths(new Date(prev.getFullYear(), prev.getMonth(), 1), 1)
+        .toISOString().slice(0, 10);
+    } else {
+      base.start = new Date().toISOString().slice(0, 10);
+    }
+    base.billId = (base.bills || []).reduce(function (m, b) { return Math.max(m, Number(b.id) || 0); }, 0);
+    state.phases.list.push(base);
+    openPhaseId = base.id;
+    saveState();
+    renderAll();
+  }
+
+  function renderPhases() {
+    setInputValue("ph-horizonYears", state.phases.horizonYears);
+    renderPhaseList();
+    renderPhaseEventList();
+  }
+
+  function renderPhaseList() {
+    const listEl = document.getElementById("ph-list");
+    const ordered = phaseList();
+    listEl.innerHTML = "";
+    if (!ordered.length) {
+      listEl.innerHTML = '<p class="empty-msg">No phases yet — add one to start. The first copies your Cash Flow budget.</p>';
+      return;
+    }
+    ordered.forEach(function (p, i) {
+      const next = ordered[i + 1];
+      const card = document.createElement("div");
+      card.className = "ph-phase" + (p.id === openPhaseId ? " open" : "");
+
+      const head = document.createElement("div");
+      head.className = "ph-head";
+      const out = computePhase(p);
+      head.innerHTML =
+        '<span class="ph-caret">' + (p.id === openPhaseId ? "&#9662;" : "&#9656;") + '</span>' +
+        '<span class="ph-name"></span>' +
+        '<span class="ph-range"></span>' +
+        '<span class="ph-surplus ' + (out.surplusMonthly < 0 ? "bad" : "") + '"></span>';
+      head.querySelector(".ph-name").textContent = (p.name || "").trim() || "Untitled phase";
+      head.querySelector(".ph-range").textContent =
+        fmtPhaseMonth(p.start) + (next ? " → " + fmtPhaseMonth(next.start) : " onward");
+      head.querySelector(".ph-surplus").textContent = fmt$(out.surplusMonthly) + " / mo";
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn small danger";
+      removeBtn.type = "button";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        state.phases.list = state.phases.list.filter(function (x) { return x.id !== p.id; });
+        if (openPhaseId === p.id) openPhaseId = null;
+        saveState();
+        renderAll();
+      });
+      head.appendChild(removeBtn);
+
+      head.addEventListener("click", function () {
+        openPhaseId = openPhaseId === p.id ? null : p.id;
+        renderPhaseList();
+      });
+      card.appendChild(head);
+
+      if (p.id === openPhaseId) card.appendChild(buildPhaseEditor(p));
+      listEl.appendChild(card);
+    });
+  }
+
+  function buildPhaseEditor(p) {
+    const body = document.createElement("div");
+    body.className = "ph-body";
+
+    body.innerHTML =
+      '<div class="field-row">' +
+      '<div class="field"><label>Phase name</label><input type="text" maxlength="60" class="ph-f-name"></div>' +
+      '<div class="field"><label>Starts</label><input type="date" class="ph-f-start"></div>' +
+      '</div>' +
+      '<h3>Income</h3>' +
+      '<div class="field"><label>Gross regular pay (monthly $)</label><input type="number" step="100" class="ph-f-gross"></div>' +
+      '<div class="field-row">' +
+      '<div class="field"><label class="ph-f-bonusLabel">Gross bonus pay ($)</label><input type="number" step="100" class="ph-f-bonus"></div>' +
+      '<div class="field"><label>Frequency</label><select class="ph-f-bonusFreq">' +
+      '<option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="annually">Annually</option>' +
+      '</select></div>' +
+      '</div>' +
+      '<div class="field"><label>Bonus lands in</label><div class="month-picker ph-f-bonusMonths"></div></div>' +
+      '<h3>Payroll deductions</h3>' +
+      '<div class="field-row">' +
+      '<div class="field"><label>Tax rate &mdash; regular (%)</label><input type="number" step="0.5" class="ph-f-taxReg"></div>' +
+      '<div class="field"><label>Tax rate &mdash; bonus (%)</label><input type="number" step="0.5" class="ph-f-taxBonus"></div>' +
+      '</div>' +
+      '<div class="ph-f-deductions"></div>' +
+      '<h3>Bills</h3>' +
+      '<div class="ph-f-bills"></div>' +
+      '<button class="btn small ph-f-addBill" type="button">+ Add bill</button>' +
+      '<div class="ph-totals"></div>';
+
+    const totals = body.querySelector(".ph-totals");
+    function refreshTotals() {
+      const out = computePhase(p);
+      totals.innerHTML =
+        '<div class="stat"><span>Net regular pay</span><span class="val">' + fmt$(out.regular.net) + ' / month</span></div>' +
+        '<div class="stat"><span>Net bonus pay</span><span class="val">' + fmt$(out.bonus.net) + ' / ' + BONUS_FREQ_LABELS[p.bonusFrequency] + ' check</span></div>' +
+        '<div class="stat"><span>Bills</span><span class="val">' + fmt$(out.billsMonthly) + ' / month equivalent</span></div>' +
+        '<div class="stat total"><span>Left for goals</span><span class="val">' + fmt$(out.surplusMonthly) + ' / month</span></div>';
+      const headSurplus = document.querySelector(".ph-phase.open .ph-surplus");
+      if (headSurplus) {
+        headSurplus.textContent = fmt$(out.surplusMonthly) + " / mo";
+        headSurplus.classList.toggle("bad", out.surplusMonthly < 0);
+      }
+    }
+
+    const nameEl = body.querySelector(".ph-f-name");
+    nameEl.value = p.name || "";
+    nameEl.addEventListener("input", function (e) {
+      p.name = e.target.value;
+      saveState();
+      const headName = document.querySelector(".ph-phase.open .ph-name");
+      if (headName) headName.textContent = (p.name || "").trim() || "Untitled phase";
+    });
+
+    // Start date reorders the list and shifts every later phase's range, so
+    // this one does rebuild — a date picker commits on change, not per key.
+    const startEl = body.querySelector(".ph-f-start");
+    startEl.value = p.start || "";
+    startEl.addEventListener("change", function (e) {
+      p.start = e.target.value;
+      saveState();
+      renderAll();
+    });
+
+    const grossEl = body.querySelector(".ph-f-gross");
+    grossEl.value = p.grossRegularMonthly;
+    grossEl.addEventListener("input", function (e) {
+      p.grossRegularMonthly = e.target.value === "" ? 0 : Number(e.target.value);
+      saveState();
+      refreshTotals();
+    });
+
+    body.querySelector(".ph-f-bonusLabel").textContent =
+      "Gross bonus pay (" + BONUS_FREQ_LABELS[p.bonusFrequency] + " $)";
+    const bonusEl = body.querySelector(".ph-f-bonus");
+    bonusEl.value = p.grossBonusAmount;
+    bonusEl.addEventListener("input", function (e) {
+      p.grossBonusAmount = e.target.value === "" ? 0 : Number(e.target.value);
+      saveState();
+      refreshTotals();
+    });
+
+    const freqEl = body.querySelector(".ph-f-bonusFreq");
+    freqEl.value = p.bonusFrequency;
+    freqEl.addEventListener("change", function (e) {
+      p.bonusFrequency = e.target.value;
+      saveState();
+      renderPhaseList();
+    });
+
+    renderMonthPicker(body.querySelector(".ph-f-bonusMonths"), p.bonusMonths || [], function (m) {
+      const list = p.bonusMonths || [];
+      const idx = list.indexOf(m);
+      p.bonusMonths = idx === -1 ? list.concat([m]) : list.filter(function (x) { return x !== m; });
+      saveState();
+      renderPhaseList();
+    });
+
+    const taxRegEl = body.querySelector(".ph-f-taxReg");
+    taxRegEl.value = p.taxRateRegular;
+    taxRegEl.addEventListener("input", function (e) {
+      p.taxRateRegular = e.target.value === "" ? 0 : Number(e.target.value);
+      saveState();
+      refreshTotals();
+    });
+    const taxBonusEl = body.querySelector(".ph-f-taxBonus");
+    taxBonusEl.value = p.taxRateBonus;
+    taxBonusEl.addEventListener("input", function (e) {
+      p.taxRateBonus = e.target.value === "" ? 0 : Number(e.target.value);
+      saveState();
+      refreshTotals();
+    });
+
+    const dedEl = body.querySelector(".ph-f-deductions");
+    DEDUCTION_ORDER.forEach(function (key) {
+      dedEl.appendChild(buildDeductionRow(key, p.deductions[key], refreshTotals, renderPhaseList));
+    });
+
+    const billsEl = body.querySelector(".ph-f-bills");
+    (p.bills || []).forEach(function (b) {
+      billsEl.appendChild(buildPhaseBillRow(p, b, refreshTotals));
+    });
+    if (!(p.bills || []).length) {
+      billsEl.innerHTML = '<p class="empty-msg">No bills in this phase</p>';
+    }
+
+    body.querySelector(".ph-f-addBill").addEventListener("click", function () {
+      p.billId = (Number(p.billId) || 0) + 1;
+      p.bills = (p.bills || []).concat([
+        { id: p.billId, name: "New bill", amount: 0, cadence: "monthly", dueMonths: [] }
+      ]);
+      saveState();
+      renderPhaseList();
+    });
+
+    refreshTotals();
+    return body;
+  }
+
+  function buildPhaseBillRow(p, b, onValue) {
+    const row = document.createElement("div");
+    row.className = "bill-row";
+    row.innerHTML =
+      '<div class="field-row">' +
+      '<div class="field"><label>Name</label><input type="text" class="pb-name"></div>' +
+      '<div class="field"><label>Amount ($)</label><input type="number" step="25" min="0" class="pb-amt"></div>' +
+      '<div class="field"><label>Cadence</label><select class="pb-cadence">' +
+      Object.keys(CADENCE_PER_YEAR).map(function (k) {
+        return '<option value="' + k + '">' + CADENCE_LABELS[k] + '</option>';
+      }).join("") +
+      '</select></div>' +
+      '</div>' +
+      (b.cadence === "monthly" ? "" : '<div class="field"><label>Due in</label><div class="month-picker pb-due"></div></div>') +
+      '<div class="derived pb-eq"></div>';
+
+    const eq = row.querySelector(".pb-eq");
+    function refreshEq() {
+      eq.textContent = fmt$(billAnnual(b) / 12) + " / month equivalent · " + fmt$(billAnnual(b)) + " / year";
+    }
+
+    const nameEl = row.querySelector(".pb-name");
+    nameEl.value = b.name;
+    nameEl.addEventListener("input", function (e) { b.name = e.target.value; saveState(); });
+
+    const amtEl = row.querySelector(".pb-amt");
+    amtEl.value = b.amount;
+    amtEl.addEventListener("input", function (e) {
+      b.amount = e.target.value === "" ? 0 : Number(e.target.value);
+      saveState();
+      refreshEq();
+      onValue();
+    });
+
+    const cadenceEl = row.querySelector(".pb-cadence");
+    cadenceEl.value = b.cadence;
+    cadenceEl.addEventListener("change", function (e) {
+      b.cadence = e.target.value;
+      saveState();
+      renderPhaseList();
+    });
+
+    const dueEl = row.querySelector(".pb-due");
+    if (dueEl) {
+      renderMonthPicker(dueEl, billDueMonths(b), function (m) {
+        const list = (b.dueMonths || []).slice();
+        const idx = list.indexOf(m);
+        b.dueMonths = idx === -1 ? list.concat([m]) : list.filter(function (x) { return x !== m; });
+        saveState();
+        renderPhaseList();
+      });
+    }
+
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "btn small danger";
+    removeBtn.type = "button";
+    removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", function () {
+      p.bills = p.bills.filter(function (x) { return x.id !== b.id; });
+      saveState();
+      renderPhaseList();
+    });
+    row.appendChild(removeBtn);
+
+    refreshEq();
+    return row;
+  }
+
+  function renderPhaseEventList() {
+    const listEl = document.getElementById("ph-event-list");
+    const events = state.phases.events || [];
+    listEl.innerHTML = "";
+    if (!events.length) {
+      listEl.innerHTML = '<p class="empty-msg">No one-time amounts yet</p>';
+      return;
+    }
+    events.slice().sort(function (a, b) {
+      return (a.date || "") < (b.date || "") ? -1 : (a.date || "") > (b.date || "") ? 1 : 0;
+    }).forEach(function (ev) {
+      const row = document.createElement("div");
+      row.className = "bill-row";
+      row.innerHTML =
+        '<div class="field-row">' +
+        '<div class="field"><label>Name</label><input type="text" class="pe-name" placeholder="e.g. RSU Vest"></div>' +
+        '<div class="field"><label>Amount ($)</label><input type="number" step="100" class="pe-amt"></div>' +
+        '<div class="field"><label>Date</label><input type="date" class="pe-date"></div>' +
+        '</div>';
+
+      const nameEl = row.querySelector(".pe-name");
+      const amtEl = row.querySelector(".pe-amt");
+      const dateEl = row.querySelector(".pe-date");
+      nameEl.value = ev.name || "";
+      amtEl.value = ev.amount;
+      dateEl.value = ev.date || "";
+      nameEl.addEventListener("input", function (e) { ev.name = e.target.value; saveState(); });
+      amtEl.addEventListener("input", function (e) {
+        ev.amount = e.target.value === "" ? 0 : Number(e.target.value);
+        saveState();
+      });
+      dateEl.addEventListener("change", function (e) {
+        ev.date = e.target.value;
+        saveState();
+        renderPhaseEventList();
+      });
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "btn small danger";
+      removeBtn.type = "button";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", function () {
+        state.phases.events = state.phases.events.filter(function (x) { return x.id !== ev.id; });
+        saveState();
+        renderPhaseEventList();
+      });
+      row.appendChild(removeBtn);
+
+      listEl.appendChild(row);
+    });
+  }
+
   function renderHousing() {
     const h = state.housing;
     const out = computeHousing();
@@ -3022,61 +3582,66 @@
     });
   }
 
+  // One payroll-deduction row, shared by the Cash Flow tab and every phase.
+  // onValue fires per keystroke (refresh totals only — rebuilding would steal
+  // focus); onStructure fires when a control changes the row's own shape.
+  function buildDeductionRow(key, d, onValue, onStructure) {
+    const row = document.createElement("div");
+    row.className = "ded-row";
+
+    const isPercent = d.type === "percent";
+    // Only benefits premiums genuinely vary — HSA and traditional retirement
+    // are always pre-tax, Roth and tithe always post-tax — so the rest show
+    // their treatment as static text instead of an editable control.
+    const treatmentEditable = key === "benefits";
+    row.innerHTML =
+      '<div class="ded-name">' + DEDUCTION_LABELS[key] + '</div>' +
+      '<div class="field-row">' +
+      '<div class="field"><label>' + (isPercent ? "%" : "$ / month") + '</label>' +
+      '<input type="number" class="ded-amt" step="' + (isPercent ? "0.5" : "10") + '" min="0"></div>' +
+      (treatmentEditable
+        ? '<div class="field"><label>Treatment</label><select class="ded-treatment">' +
+          '<option value="pre">Pre-tax</option><option value="post">Post-tax</option></select></div>'
+        : '<div class="field"><label>Treatment</label><div class="ded-static">' + (d.taxTreatment === "pre" ? "Pre-tax" : "Post-tax") + '</div></div>') +
+      '<div class="field"><label>Applies to</label><select class="ded-applies">' +
+      '<option value="regular">Regular</option><option value="bonus">Bonus</option><option value="both">Both</option>' +
+      '</select></div>' +
+      '</div>';
+
+    const amt = row.querySelector(".ded-amt");
+    amt.value = d.amount;
+    amt.addEventListener("input", function (e) {
+      d.amount = e.target.value === "" ? 0 : Number(e.target.value);
+      saveState();
+      onValue();
+    });
+
+    const applies = row.querySelector(".ded-applies");
+    applies.value = d.appliesTo;
+    applies.addEventListener("change", function (e) {
+      d.appliesTo = e.target.value;
+      saveState();
+      onStructure();
+    });
+
+    const treatment = row.querySelector(".ded-treatment");
+    if (treatment) {
+      treatment.value = d.taxTreatment;
+      treatment.addEventListener("change", function (e) {
+        d.taxTreatment = e.target.value;
+        saveState();
+        onStructure();
+      });
+    }
+    return row;
+  }
+
   function renderDeductionList() {
     const c = state.cashflow;
     const listEl = document.getElementById("cf-deduction-list");
     listEl.innerHTML = "";
     DEDUCTION_ORDER.forEach(function (key) {
-      const d = c.deductions[key];
-      const row = document.createElement("div");
-      row.className = "ded-row";
-
-      const isPercent = d.type === "percent";
-      // Only benefits premiums genuinely vary — HSA and traditional retirement
-      // are always pre-tax, Roth and tithe always post-tax — so the rest show
-      // their treatment as static text instead of an editable control.
-      const treatmentEditable = key === "benefits";
-      row.innerHTML =
-        '<div class="ded-name">' + DEDUCTION_LABELS[key] + '</div>' +
-        '<div class="field-row">' +
-        '<div class="field"><label>' + (isPercent ? "%" : "$ / month") + '</label>' +
-        '<input type="number" class="ded-amt" step="' + (isPercent ? "0.5" : "10") + '" min="0"></div>' +
-        (treatmentEditable
-          ? '<div class="field"><label>Treatment</label><select class="ded-treatment">' +
-            '<option value="pre">Pre-tax</option><option value="post">Post-tax</option></select></div>'
-          : '<div class="field"><label>Treatment</label><div class="ded-static">' + (d.taxTreatment === "pre" ? "Pre-tax" : "Post-tax") + '</div></div>') +
-        '<div class="field"><label>Applies to</label><select class="ded-applies">' +
-        '<option value="regular">Regular</option><option value="bonus">Bonus</option><option value="both">Both</option>' +
-        '</select></div>' +
-        '</div>';
-
-      const amt = row.querySelector(".ded-amt");
-      amt.value = d.amount;
-      amt.addEventListener("input", function (e) {
-        d.amount = e.target.value === "" ? 0 : Number(e.target.value);
-        saveState();
-        renderCashFlowTotalsOnly();
-      });
-
-      const applies = row.querySelector(".ded-applies");
-      applies.value = d.appliesTo;
-      applies.addEventListener("change", function (e) {
-        d.appliesTo = e.target.value;
-        saveState();
-        renderAll();
-      });
-
-      const treatment = row.querySelector(".ded-treatment");
-      if (treatment) {
-        treatment.value = d.taxTreatment;
-        treatment.addEventListener("change", function (e) {
-          d.taxTreatment = e.target.value;
-          saveState();
-          renderAll();
-        });
-      }
-
-      listEl.appendChild(row);
+      listEl.appendChild(buildDeductionRow(key, c.deductions[key], renderCashFlowTotalsOnly, renderAll));
     });
   }
 
@@ -3909,6 +4474,7 @@
 
   function renderAll() {
     renderGoals();
+    renderPhases();
     renderHousing();
     renderCashFlow();
     renderSurplus();
@@ -4037,6 +4603,7 @@
   // (the amortization and projection tables) print as just their summary.
   function preparePrintableDom() {
     renderGoalsResult();
+    renderGoalsResult({ source: "phases", containerId: "ph-result-area" });
     document.querySelectorAll("details").forEach(function (d) { d.open = true; });
   }
 
