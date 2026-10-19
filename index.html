@@ -2098,6 +2098,9 @@
       // Months before the first phase starts carry no budget, only events.
       if (idx === -1) continue;
       const p = ordered[idx], c = computed[idx];
+      // That month is already sitting in a one-time amount, so counting its
+      // pay and bills again would bank the same money twice.
+      if (p.skipFirstMonth && k === startKeys[idx]) continue;
       const month = (k % 12) + 1;
       let amt = c.regular.net;
       if ((p.bonusMonths || []).indexOf(month) !== -1) amt += c.bonus.net;
@@ -3201,6 +3204,8 @@
     state.phases.phaseId += 1;
     base.id = state.phases.phaseId;
     base.name = existing.length ? "New phase" : "Current budget";
+    // Only ever right for the phase you're living in now, so a copy starts off.
+    base.skipFirstMonth = false;
     if (existing.length) {
       const prev = goalsParseDate(existing[existing.length - 1].start) || new Date();
       base.start = goalsAddMonths(new Date(prev.getFullYear(), prev.getMonth(), 1), 1)
@@ -3244,7 +3249,8 @@
         '<span class="ph-surplus ' + (out.surplusMonthly < 0 ? "bad" : "") + '"></span>';
       head.querySelector(".ph-name").textContent = (p.name || "").trim() || "Untitled phase";
       head.querySelector(".ph-range").textContent =
-        fmtPhaseMonth(p.start) + (next ? " → " + fmtPhaseMonth(next.start) : " onward");
+        fmtPhaseMonth(p.start) + (next ? " → " + fmtPhaseMonth(next.start) : " onward") +
+        (p.skipFirstMonth ? " · 1st month skipped" : "");
       head.querySelector(".ph-surplus").textContent = fmt$(out.surplusMonthly) + " / mo";
 
       const removeBtn = document.createElement("button");
@@ -3280,6 +3286,11 @@
       '<div class="field"><label>Phase name</label><input type="text" maxlength="60" class="ph-f-name"></div>' +
       '<div class="field"><label>Starts</label><input type="date" class="ph-f-start"></div>' +
       '</div>' +
+      '<div class="checkbox-row">' +
+      '<input type="checkbox" class="ph-f-skipFirst" id="ph-skip-' + p.id + '">' +
+      '<label for="ph-skip-' + p.id + '">First month already saved</label>' +
+      '</div>' +
+      '<div class="sub" style="margin:-8px 0 4px">Skips this phase&rsquo;s opening month entirely. Use it when a one-time amount already includes that month&rsquo;s leftover, so the same money isn&rsquo;t counted twice.</div>' +
       '<h3>Income</h3>' +
       '<div class="field"><label>Gross regular pay (monthly $)</label><input type="number" step="100" class="ph-f-gross"></div>' +
       '<div class="field-row">' +
@@ -3326,6 +3337,14 @@
 
     // Start date reorders the list and shifts every later phase's range, so
     // this one does rebuild — a date picker commits on change, not per key.
+    const skipEl = body.querySelector(".ph-f-skipFirst");
+    skipEl.checked = !!p.skipFirstMonth;
+    skipEl.addEventListener("change", function (e) {
+      p.skipFirstMonth = e.target.checked;
+      saveState();
+      renderPhaseList();
+    });
+
     const startEl = body.querySelector(".ph-f-start");
     startEl.value = p.start || "";
     startEl.addEventListener("change", function (e) {
