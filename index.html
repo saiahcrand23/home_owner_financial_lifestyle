@@ -482,15 +482,25 @@
       </div>
 
       <div class="card full-width print-hide">
-        <h2>One-time amounts</h2>
-        <p class="hint">Money that arrives on a date rather than every month &mdash; a starting balance, RSU vests, a tax refund. A negative amount works too, for a one-off cost.</p>
+        <h2>One-time</h2>
+        <p class="hint">Money that arrives on a date rather than every month &mdash; a starting balance, RSU vests, a tax refund. Regular and bonus pay stay in the phase above, where the quarterly/annual setting handles them. A negative amount works too, for a one-off cost.</p>
         <div id="ph-event-list"></div>
         <button class="btn" id="ph-add-event" type="button">+ Add one-time amount</button>
       </div>
 
+      <div class="card full-width print-hide">
+        <h2>Goals</h2>
+        <p class="hint">The same goals and priority order as the Savings Goals tab &mdash; shown here so you can see what the one-time money above is being saved toward. Edit them in either place.</p>
+        <div id="ph-custom-goal-list"></div>
+        <button class="btn" id="ph-add-custom-goal" type="button">+ Add goal</button>
+        <h3>Priority order</h3>
+        <p class="hint">Each goal only receives cash once every goal above it is fully funded.</p>
+        <div id="ph-priority-list"></div>
+      </div>
+
       <div class="card full-width">
         <h2>Timeline</h2>
-        <p class="hint">Funds the goals and priority order from the Savings Goals tab, month by month, out of the phases above. Edit a goal there and it updates here.</p>
+        <p class="hint">Funds the goals above, month by month, out of each phase&rsquo;s surplus plus the one-time money &mdash; in priority order, each goal waiting until the one before it is fully funded.</p>
         <div class="field print-hide" style="max-width:220px">
           <label>Project through (years)</label>
           <input type="number" id="ph-horizonYears" step="1" min="1" max="50">
@@ -2503,13 +2513,16 @@
       saveState();
       renderAll();
     });
-    document.getElementById("g-add-custom-goal").addEventListener("click", function () {
+    ["g-add-custom-goal", "ph-add-custom-goal"].forEach(function (id) {
+      document.getElementById(id).addEventListener("click", addCustomGoal);
+    });
+    function addCustomGoal() {
       state.goals.customGoalId += 1;
       state.goals.customGoals.push({ id: state.goals.customGoalId, name: "", target: "" });
       state.goals.order.push("custom:" + state.goals.customGoalId);
       saveState();
       renderAll();
-    });
+    }
     document.getElementById("g-calculate").addEventListener("click", function () {
       renderGoalsResult();
     });
@@ -2699,8 +2712,8 @@
 
     renderGoalsLoanList();
     renderGoalsContribList();
-    renderGoalsCustomGoalList();
-    renderGoalsPriorityList();
+    renderGoalsCustomGoalLists();
+    renderGoalsPriorityLists();
   }
 
   // Field-level edits inside these rows only update state + saveState() —
@@ -2752,9 +2765,17 @@
     });
   }
 
-  function renderGoalsCustomGoalList() {
+  // Goals are shared, and both the Savings Goals tab and the Phases tab show
+  // them, so these render into whichever container they're handed and the
+  // plural wrappers keep every copy on screen in step.
+  const GOAL_LIST_CONTAINERS = ["g-custom-goal-list", "ph-custom-goal-list"];
+  const PRIORITY_LIST_CONTAINERS = ["g-priority-list", "ph-priority-list"];
+  function renderGoalsCustomGoalLists() { GOAL_LIST_CONTAINERS.forEach(renderGoalsCustomGoalList); }
+  function renderGoalsPriorityLists() { PRIORITY_LIST_CONTAINERS.forEach(renderGoalsPriorityList); }
+
+  function renderGoalsCustomGoalList(containerId) {
     const customGoals = state.goals.customGoals;
-    const listEl = document.getElementById("g-custom-goal-list");
+    const listEl = document.getElementById(containerId || "g-custom-goal-list");
     listEl.innerHTML = "";
     if (!customGoals.length) {
       listEl.innerHTML = '<p class="empty-msg">No additional goals added yet</p>';
@@ -2800,7 +2821,7 @@
         cg.name = e.target.value;
         saveState();
         syncTitle();
-        renderGoalsPriorityList();
+        renderGoalsPriorityLists();
       });
       targetInput.addEventListener("input", function (e) {
         cg.target = e.target.value;
@@ -2840,8 +2861,8 @@
     order[iB] = tmp;
   }
 
-  function renderGoalsPriorityList() {
-    const listEl = document.getElementById("g-priority-list");
+  function renderGoalsPriorityList(containerId) {
+    const listEl = document.getElementById(containerId || "g-priority-list");
     const visible = enabledGoalOrder();
     listEl.innerHTML = "";
     if (!visible.length) {
@@ -3298,9 +3319,9 @@
       '<div class="field"><label>Tax rate &mdash; bonus (%)</label><input type="number" step="0.5" class="ph-f-taxBonus"></div>' +
       '</div>' +
       '<div class="ph-f-deductions"></div>' +
-      '<h3>Bills</h3>' +
+      '<h3>Budget</h3>' +
       '<div class="ph-f-bills"></div>' +
-      '<button class="btn small ph-f-addBill" type="button">+ Add bill</button>' +
+      '<button class="btn small ph-f-addBill" type="button">+ Add category</button>' +
       '<div class="ph-totals"></div>';
 
     const totals = body.querySelector(".ph-totals");
@@ -3309,7 +3330,7 @@
       totals.innerHTML =
         '<div class="stat"><span>Net regular pay</span><span class="val">' + fmt$(out.regular.net) + ' / month</span></div>' +
         '<div class="stat"><span>Net bonus pay</span><span class="val">' + fmt$(out.bonus.net) + ' / ' + BONUS_FREQ_LABELS[p.bonusFrequency] + ' check</span></div>' +
-        '<div class="stat"><span>Bills</span><span class="val">' + fmt$(out.billsMonthly) + ' / month equivalent</span></div>' +
+        '<div class="stat"><span>Budget</span><span class="val">' + fmt$(out.billsMonthly) + ' / month equivalent</span></div>' +
         '<div class="stat total"><span>Left for goals</span><span class="val">' + fmt$(out.surplusMonthly) + ' / month</span></div>';
       const headSurplus = document.querySelector(".ph-phase.open .ph-surplus");
       if (headSurplus) {
@@ -3396,13 +3417,13 @@
       billsEl.appendChild(buildPhaseBillRow(p, b, refreshTotals));
     });
     if (!(p.bills || []).length) {
-      billsEl.innerHTML = '<p class="empty-msg">No bills in this phase</p>';
+      billsEl.innerHTML = '<p class="empty-msg">No budget categories in this phase</p>';
     }
 
     body.querySelector(".ph-f-addBill").addEventListener("click", function () {
       p.billId = (Number(p.billId) || 0) + 1;
       p.bills = (p.bills || []).concat([
-        { id: p.billId, name: "New bill", amount: 0, cadence: "monthly", dueMonths: [] }
+        { id: p.billId, name: "New category", amount: 0, cadence: "monthly", dueMonths: [] }
       ]);
       saveState();
       renderPhaseList();
