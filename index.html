@@ -248,8 +248,10 @@
   .ph-caret { color: var(--text-dim); font-size: 0.8rem; }
   .ph-head .ph-name { font-weight: 600; font-size: 0.9rem; }
   .ph-head .ph-range { color: var(--text-dim); font-size: 0.8rem; flex: 1; }
+  .ph-money { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.3; }
   .ph-head .ph-surplus { font-weight: 600; font-size: 0.88rem; color: var(--accent); font-variant-numeric: tabular-nums; }
   .ph-head .ph-surplus.bad { color: var(--bad); }
+  .ph-head .ph-split { font-size: 0.72rem; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .ph-body { padding: 4px 14px 14px; border-top: 1px solid var(--border); }
   .ph-body h3 { margin-top: 14px; }
   .ph-totals { margin-top: 12px; }
@@ -2063,8 +2065,26 @@
       billsAnnual: billsAnnual, netAnnual: netAnnual,
       netMonthly: netAnnual / 12,
       billsMonthly: billsAnnual / 12,
+      // Bills come out of regular pay; the bonus is spread across the year.
+      regularSurplusMonthly: regular.net - billsAnnual / 12,
+      bonusMonthly: bonus.net * bonusPerYear / 12,
       surplusMonthly: (netAnnual - billsAnnual) / 12
     };
+  }
+
+  // How many bonus checks actually land inside a phase's span. The spread
+  // figure above assumes a full year of them, which overstates a phase too
+  // short to contain one — null means open-ended, so the year rate holds.
+  function bonusChecksInPhase(p, nextStartKey) {
+    const months = (p.bonusMonths || []).filter(function (m) { return m >= 1 && m <= 12; });
+    const startKey = phaseStartKey(p);
+    if (startKey === null || nextStartKey === null) return null;
+    if (!months.length) return 0;
+    let count = 0;
+    for (let k = startKey + (p.skipFirstMonth ? 1 : 0); k < nextStartKey; k++) {
+      if (months.indexOf((k % 12) + 1) !== -1) count++;
+    }
+    return count;
   }
 
   function phasesSimStart() {
@@ -3220,6 +3240,19 @@
     renderAll();
   }
 
+  // "regular $2,676 · bonus $2,819 (1 check)" — the two halves of the blue
+  // figure, plus how many bonus checks really land here, since the bonus half
+  // is a yearly rate spread over 12 months rather than money this phase sees.
+  function phaseSplitText(p, out, next) {
+    const checks = bonusChecksInPhase(p, next ? phaseStartKey(next) : null);
+    let bonusPart;
+    if (out.bonusMonthly === 0) bonusPart = "no bonus";
+    else if (checks === null) bonusPart = "bonus " + fmt$(out.bonusMonthly) + " (" + out.bonusPerYear + "/yr)";
+    else if (checks === 0) bonusPart = "bonus " + fmt$(out.bonusMonthly) + " (none land here)";
+    else bonusPart = "bonus " + fmt$(out.bonusMonthly) + " (" + checks + " check" + (checks === 1 ? "" : "s") + ")";
+    return "regular " + fmt$(out.regularSurplusMonthly) + " · " + bonusPart;
+  }
+
   function renderPhases() {
     setInputValue("ph-horizonYears", state.phases.horizonYears);
     renderPhaseList();
@@ -3246,12 +3279,16 @@
         '<span class="ph-caret">' + (p.id === openPhaseId ? "&#9662;" : "&#9656;") + '</span>' +
         '<span class="ph-name"></span>' +
         '<span class="ph-range"></span>' +
-        '<span class="ph-surplus ' + (out.surplusMonthly < 0 ? "bad" : "") + '"></span>';
+        '<span class="ph-money">' +
+        '<span class="ph-surplus ' + (out.surplusMonthly < 0 ? "bad" : "") + '"></span>' +
+        '<span class="ph-split"></span>' +
+        '</span>';
       head.querySelector(".ph-name").textContent = (p.name || "").trim() || "Untitled phase";
       head.querySelector(".ph-range").textContent =
         fmtPhaseMonth(p.start) + (next ? " → " + fmtPhaseMonth(next.start) : " onward") +
         (p.skipFirstMonth ? " · 1st month skipped" : "");
       head.querySelector(".ph-surplus").textContent = fmt$(out.surplusMonthly) + " / mo";
+      head.querySelector(".ph-split").textContent = phaseSplitText(p, out, next);
 
       const removeBtn = document.createElement("button");
       removeBtn.className = "btn small danger";
@@ -3314,16 +3351,28 @@
     const totals = body.querySelector(".ph-totals");
     function refreshTotals() {
       const out = computePhase(p);
+      const ordered = phaseList();
+      const idx = ordered.findIndex(function (x) { return x.id === p.id; });
+      const next = idx > -1 ? ordered[idx + 1] : null;
+      const checks = bonusChecksInPhase(p, next ? phaseStartKey(next) : null);
+      const checksNote = checks === null
+        ? out.bonusPerYear + " / year"
+        : checks + " check" + (checks === 1 ? "" : "s") + " in this phase";
       totals.innerHTML =
         '<div class="stat"><span>Net regular pay</span><span class="val">' + fmt$(out.regular.net) + ' / month</span></div>' +
-        '<div class="stat"><span>Net bonus pay</span><span class="val">' + fmt$(out.bonus.net) + ' / ' + BONUS_FREQ_LABELS[p.bonusFrequency] + ' check</span></div>' +
+        '<div class="stat"><span>Net bonus pay</span><span class="val">' + fmt$(out.bonus.net) + ' / ' + BONUS_FREQ_LABELS[p.bonusFrequency] + ' check <span class="val-sub">' + checksNote + '</span></span></div>' +
         '<div class="stat"><span>Budget</span><span class="val">' + fmt$(out.billsMonthly) + ' / month equivalent</span></div>' +
-        '<div class="stat total"><span>Left for goals</span><span class="val">' + fmt$(out.surplusMonthly) + ' / month</span></div>';
+        '<h3>Left for goals</h3>' +
+        '<div class="stat"><span>From regular pay</span><span class="val">' + fmt$(out.regularSurplusMonthly) + ' / month</span></div>' +
+        '<div class="stat"><span>From bonus</span><span class="val">' + fmt$(out.bonusMonthly) + ' / month <span class="val-sub">' + fmt$(out.bonus.net * out.bonusPerYear) + ' / year spread over 12</span></span></div>' +
+        '<div class="stat total"><span>Total</span><span class="val">' + fmt$(out.surplusMonthly) + ' / month</span></div>';
       const headSurplus = document.querySelector(".ph-phase.open .ph-surplus");
       if (headSurplus) {
         headSurplus.textContent = fmt$(out.surplusMonthly) + " / mo";
         headSurplus.classList.toggle("bad", out.surplusMonthly < 0);
       }
+      const headSplit = document.querySelector(".ph-phase.open .ph-split");
+      if (headSplit) headSplit.textContent = phaseSplitText(p, out, next);
     }
 
     const nameEl = body.querySelector(".ph-f-name");
