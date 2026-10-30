@@ -66,6 +66,7 @@
     z-index: 10;
   }
   header h1 { font-size: 1.15rem; margin: 0; }
+  .build-stamp { display: block; font-size: 0.68rem; font-weight: 400; color: var(--text-dim); margin-top: 2px; font-variant-numeric: tabular-nums; }
   .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   .btn {
     border: 1px solid var(--border);
@@ -367,7 +368,7 @@
 <body>
 
 <header>
-  <h1>Financial Goal Projections</h1>
+  <h1>Financial Goal Projections<span class="build-stamp print-hide" id="build-stamp"></span></h1>
   <div class="header-actions">
     <button class="btn" id="btn-print">Print / Save PDF</button>
     <button class="btn" id="btn-export">Export data</button>
@@ -4924,7 +4925,22 @@
   // ---------------------------------------------------------------------
   // Init
   // ---------------------------------------------------------------------
+  // Stamps the header with when this file was published, straight from the
+  // response's Last-Modified. Nothing to bump by hand, and it answers the
+  // question a stale cache raises: is this machine running the current build?
+  function renderBuildStamp() {
+    const el = document.getElementById("build-stamp");
+    const d = new Date(document.lastModified);
+    if (isNaN(d.getTime())) { el.textContent = ""; return; }
+    const pad = function (n) { return n < 10 ? "0" + n : String(n); };
+    el.textContent = "build " + d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+      " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    el.title = "Published " + d.toLocaleString() +
+      ". If two machines show different builds, the older one is serving a cached copy — hard-refresh it.";
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    renderBuildStamp();
     loadState();
     // Must land before wireInputs(), which seeds every field from state.
     const fromReportLink = loadStateFromReportLink();
