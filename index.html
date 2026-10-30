@@ -248,6 +248,15 @@
   .ph-caret { color: var(--text-dim); font-size: 0.8rem; }
   .ph-head .ph-name { font-weight: 600; font-size: 0.9rem; }
   .ph-head .ph-range { color: var(--text-dim); font-size: 0.8rem; flex: 1; }
+  .bar-committed { fill: var(--series-contributed); }
+  .bar-pool { fill: var(--series-balance); }
+  .bar-flag { fill: var(--series-earned); }
+  .bar-hover { fill: var(--text-dim); opacity: 0; pointer-events: none; }
+  .sw-committed { background: var(--series-contributed); }
+  .sw-pool { background: var(--series-balance); }
+  .sw-flag { background: var(--series-earned); }
+  .chart-legend .swatch.sw-flag { border-radius: 50%; width: 8px; height: 8px; }
+  .chart-tooltip .tt-funded { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border); font-size: 0.74rem; color: var(--good); }
   .ph-money { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.3; }
   .ph-head .ph-surplus { font-weight: 600; font-size: 0.88rem; color: var(--accent); font-variant-numeric: tabular-nums; }
   .ph-head .ph-surplus.bad { color: var(--bad); }
@@ -1653,9 +1662,16 @@
       if (d > lastCashMonth) lastCashMonth = d;
     });
 
+    // Month-by-month record of where the money stands, so the result can be
+    // charted between milestones and not only at them.
+    const monthlySeries = [];
+    let committed = 0;
+
     while (monthIdx < MAX && phaseIdx < phases.length) {
       const k = goalsMonthKey(cur);
       let cashLeft = cashMap.get(k) || 0;
+      const cashIn = cashLeft;
+      const funded = [];
       const phase = phases[phaseIdx];
 
       if (phase.type === "loans") {
@@ -1704,9 +1720,16 @@
           stage.goalBal = pool;
           stage.excess = pool - stage.goal;
           pool = stage.excess;
+          committed += stage.goal;
+          funded.push(stage.name);
           phaseIdx++;
         }
       }
+
+      monthlySeries.push({
+        key: k, label: goalsFmtDate(cur), cashIn: cashIn,
+        pool: pool, committed: committed, saved: committed + pool, funded: funded
+      });
 
       monthIdx++;
       cur = goalsAddMonths(cur, 1);
@@ -1772,6 +1795,7 @@
     return {
       error: null, warning: minCoverageWarning,
       timelineRows: timelineRows, timelineTotal: timelineTotal,
+      monthlySeries: monthlySeries,
       phases: phases
     };
   }
@@ -2549,7 +2573,7 @@
       function () { return state.phases.horizonYears; },
       function (v) { state.phases.horizonYears = v; });
     document.getElementById("ph-calculate").addEventListener("click", function () {
-      renderGoalsResult({ source: "phases", containerId: "ph-result-area" });
+      renderGoalsResult({ source: "phases", containerId: "ph-result-area", chart: true });
     });
 
     bindNumber("h-homePrice", function () { return state.housing.homePrice; }, function (v) { state.housing.homePrice = v; });
@@ -3101,6 +3125,23 @@
       tlList.appendChild(rowEl);
     });
     resultArea.appendChild(tlList);
+
+    if (opts.chart && result.monthlySeries && result.monthlySeries.length) {
+      const h = document.createElement("h3");
+      h.textContent = "Savings balance by month";
+      resultArea.appendChild(h);
+      const legend = document.createElement("div");
+      legend.className = "chart-legend";
+      legend.innerHTML =
+        '<div class="item"><span class="swatch sw-pool"></span><span>Still unallocated</span></div>' +
+        '<div class="item"><span class="swatch sw-committed"></span><span>Committed to goals</span></div>' +
+        '<div class="item"><span class="swatch sw-flag"></span><span>A goal was funded</span></div>';
+      resultArea.appendChild(legend);
+      const chartWrap = document.createElement("div");
+      chartWrap.className = "chart-wrap";
+      resultArea.appendChild(chartWrap);
+      renderSavingsBarChart(chartWrap, result.monthlySeries);
+    }
 
     // "after X" phrasing matches whatever phase actually precedes this one —
     // loans/emerg get their old fixed lowercase phrasing, house/custom name
@@ -4122,6 +4163,138 @@
   // Generic age-indexed multi-series line chart with hover tooltip, reused by
   // Retirement and each Kids' Future account projection. `points` is an array
   // of { age, ...seriesKeys }; `seriesConfig` describes which keys to plot.
+  // Monthly savings balance as stacked bars: what is already committed to
+  // finished goals, plus what is still sitting unallocated. The milestone
+  // list only shows the months a goal lands — this shows every month.
+  function renderSavingsBarChart(wrap, months) {
+    wrap.innerHTML = "";
+    if (!months.length) {
+      wrap.innerHTML = '<p class="hint">Nothing to chart yet.</p>';
+      return;
+    }
+
+    const W = 900, H = 300;
+    const mL = 62, mR = 14, mT = 14, mB = 44;
+    const plotW = W - mL - mR, plotH = H - mT - mB;
+    const niceMax = niceCeil(Math.max.apply(null, months.map(function (m) { return m.saved; })) || 1);
+    const slot = plotW / months.length;
+    const barW = Math.max(1.5, Math.min(26, slot * 0.72));
+
+    function yOf(v) { return mT + plotH - (Math.max(v, 0) / niceMax) * plotH; }
+    function xOf(i) { return mL + slot * (i + 0.5); }
+
+    let grid = "";
+    for (let i = 0; i <= 4; i++) {
+      const val = niceMax * i / 4, y = yOf(val);
+      grid += '<line x1="' + mL + '" y1="' + y.toFixed(1) + '" x2="' + (W - mR) + '" y2="' + y.toFixed(1) + '" class="chart-grid"/>' +
+        '<text x="' + (mL - 8) + '" y="' + (y + 4).toFixed(1) + '" class="chart-axis-label" text-anchor="end">' + fmt$compact(val) + '</text>';
+    }
+
+    // Roughly eight labels, whatever the span.
+    const step = Math.max(1, Math.ceil(months.length / 8));
+    let xAxis = '<line x1="' + mL + '" y1="' + (H - mB) + '" x2="' + (W - mR) + '" y2="' + (H - mB) + '" class="chart-axis-baseline"/>';
+    months.forEach(function (m, i) {
+      if (i % step) return;
+      const parts = m.label.split(" ");
+      const short = parts[0].slice(0, 3) + " '" + parts[1].slice(2);
+      xAxis += '<text x="' + xOf(i).toFixed(1) + '" y="' + (H - mB + 18) + '" class="chart-axis-label" text-anchor="middle">' + short + '</text>';
+    });
+
+    let bars = "";
+    months.forEach(function (m, i) {
+      const x = (xOf(i) - barW / 2).toFixed(1);
+      const yC = yOf(m.committed), yS = yOf(m.saved), y0 = yOf(0);
+      if (m.committed > 0) {
+        bars += '<rect x="' + x + '" y="' + yC.toFixed(1) + '" width="' + barW.toFixed(1) +
+          '" height="' + Math.max(0, y0 - yC).toFixed(1) + '" class="bar-committed"/>';
+      }
+      if (m.pool > 0) {
+        bars += '<rect x="' + x + '" y="' + yS.toFixed(1) + '" width="' + barW.toFixed(1) +
+          '" height="' + Math.max(0, yC - yS).toFixed(1) + '" class="bar-pool"/>';
+      }
+      if (m.funded.length) {
+        bars += '<circle cx="' + xOf(i).toFixed(1) + '" cy="' + (yS - 7).toFixed(1) + '" r="3" class="bar-flag"/>';
+      }
+    });
+
+    wrap.innerHTML =
+      '<svg class="chart-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet">' +
+      grid + xAxis + bars +
+      '<rect class="bar-hover" x="0" y="' + mT + '" width="' + slot.toFixed(1) + '" height="' + plotH + '" opacity="0"/>' +
+      '<rect class="chart-hit" x="' + mL + '" y="' + mT + '" width="' + plotW + '" height="' + plotH + '"/>' +
+      '</svg>';
+
+    const tooltip = document.createElement("div");
+    tooltip.className = "chart-tooltip";
+    wrap.appendChild(tooltip);
+
+    const svgEl = wrap.querySelector("svg");
+    const hit = wrap.querySelector(".chart-hit");
+    const hover = wrap.querySelector(".bar-hover");
+
+    function row(label, value, swatchClass) {
+      const r = document.createElement("div");
+      r.className = "tt-row";
+      const k = document.createElement("span");
+      k.className = "key";
+      if (swatchClass) {
+        const sw = document.createElement("span");
+        sw.className = "line-key " + swatchClass;
+        k.appendChild(sw);
+      }
+      const t = document.createElement("span");
+      t.textContent = label;
+      k.appendChild(t);
+      const v = document.createElement("span");
+      v.className = "value";
+      v.textContent = value;
+      r.appendChild(k); r.appendChild(v);
+      return r;
+    }
+
+    function showAt(clientX, clientY) {
+      const rect = svgEl.getBoundingClientRect();
+      const relX = (clientX - rect.left) / rect.width * W;
+      let idx = Math.floor((relX - mL) / slot);
+      idx = Math.max(0, Math.min(months.length - 1, idx));
+      const m = months[idx];
+
+      hover.setAttribute("x", (mL + slot * idx).toFixed(1));
+      hover.setAttribute("opacity", "1");
+
+      tooltip.innerHTML = "";
+      const head = document.createElement("div");
+      head.className = "tt-age";
+      head.textContent = m.label;
+      tooltip.appendChild(head);
+      tooltip.appendChild(row("Total saved", fmt$(m.saved)));
+      tooltip.appendChild(row("Committed to goals", fmt$(m.committed), "sw-committed"));
+      tooltip.appendChild(row("Still unallocated", fmt$(m.pool), "sw-pool"));
+      tooltip.appendChild(row("Added this month", fmt$(m.cashIn)));
+      if (m.funded.length) {
+        const f = document.createElement("div");
+        f.className = "tt-funded";
+        f.textContent = "✓ " + m.funded.join(", ");
+        tooltip.appendChild(f);
+      }
+
+      tooltip.style.opacity = 1;
+      const wrapRect = wrap.getBoundingClientRect();
+      const px = clientX - wrapRect.left, py = clientY - wrapRect.top;
+      const ttW = 210;
+      let left = px + 14;
+      if (left + ttW > wrapRect.width) left = px - ttW - 14;
+      tooltip.style.left = Math.max(0, left) + "px";
+      tooltip.style.top = Math.max(0, py - 60) + "px";
+    }
+
+    hit.addEventListener("pointermove", function (e) { showAt(e.clientX, e.clientY); });
+    hit.addEventListener("pointerleave", function () {
+      hover.setAttribute("opacity", "0");
+      tooltip.style.opacity = 0;
+    });
+  }
+
   function renderTimelineChart(opts) {
     const wrap = document.getElementById(opts.wrapId);
     const legend = opts.legendId ? document.getElementById(opts.legendId) : null;
@@ -4668,7 +4841,7 @@
   // (the amortization and projection tables) print as just their summary.
   function preparePrintableDom() {
     renderGoalsResult();
-    renderGoalsResult({ source: "phases", containerId: "ph-result-area" });
+    renderGoalsResult({ source: "phases", containerId: "ph-result-area", chart: true });
     document.querySelectorAll("details").forEach(function (d) { d.open = true; });
   }
 
