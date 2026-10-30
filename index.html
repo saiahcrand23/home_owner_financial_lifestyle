@@ -3298,6 +3298,13 @@
     setInputValue("ph-horizonYears", state.phases.horizonYears);
     renderPhaseList();
     renderPhaseEventList();
+    // The timeline and its chart live only in the DOM, so without this a
+    // page reload wiped them and they looked like they'd vanished. Phases
+    // are a settled plan rather than something typed into continuously, so
+    // recomputing whenever the list redraws is cheap and keeps them honest.
+    if (phaseList().length) {
+      renderGoalsResult({ source: "phases", containerId: "ph-result-area", chart: true });
+    }
   }
 
   function renderPhaseList() {
